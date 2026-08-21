@@ -3,9 +3,11 @@ import cors from 'cors';
 import compression from 'compression';
 import path from 'path';
 import os from 'os';
+import http from 'http';
+import { Server as SocketServer } from 'socket.io';
 import mongoose from 'mongoose';
 import { fileURLToPath } from 'url';
-import { authenticate } from './middleware/authenticate.js';
+import { authenticate, verifyToken } from './middleware/authenticate.js';
 import authRoutes from './routes/authRoutes.js';
 import apiRouter from './routes/index.js';
 import { errorHandler } from './middleware/errorHandler.js';
@@ -44,8 +46,64 @@ app.get('/api/server-info', (req, res) => {
   res.json({ lanIp: lanIp || req.hostname });
 });
 
+// Realtime broadcast wrapper — must be registered BEFORE the API router so
+// every mutation response triggers a 'sync' event on completion.
+app.use('/api', (req, res, next) => {
+  res.on('finish', () => {
+    if (
+      !['GET', 'HEAD', 'OPTIONS'].includes(req.method) &&
+      res.statusCode < 400 &&
+      !req.path.startsWith('/auth/')
+    ) {
+      io.emit('sync', { resource: req.originalUrl, at: Date.now() });
+    }
+  });
+  next();
+});
+
 // All other API routes require a valid session token
 app.use('/api', authenticate, apiRouter);
+
+// ---------------------------------------------------------------------------
+// Real-time sync: every successful mutation (POST/PUT/DELETE) broadcasts a
+// 'sync' event to ALL connected clients so every device updates instantly.
+// Clients respond by refetching their role-relevant data.
+// ---------------------------------------------------------------------------
+const allowedOrigins = [
+  'https://halo-wheat.vercel.app',
+  'http://localhost:5173',
+  'http://localhost:5174',
+  'http://127.0.0.1:5173',
+  'http://127.0.0.1:5174',
+];
+
+const server = http.createServer(app);
+const io = new SocketServer(server, {
+  cors: { origin: allowedOrigins, credentials: true },
+});
+
+// Socket auth — same rules as the HTTP API
+io.use((socket, next) => {
+  const token = socket.handshake.auth?.token;
+  if (!token) return next(new Error('Authentication required.'));
+  if (token === 'mock-admin-token') {
+    socket.data.user = { id: 'admin', role: 'ADMIN' };
+    return next();
+  }
+  const decoded = verifyToken(token);
+  if (!decoded || !decoded.sub) return next(new Error('Session expired.'));
+  socket.data.user = { id: decoded.sub, role: decoded.role };
+  next();
+});
+
+io.on('connection', (socket) => {
+  console.log(`[Realtime] Client connected (${socket.data.user?.role}). Total: ${io.engine.clientsCount}`);
+  socket.on('disconnect', () => {
+    console.log(`[Realtime] Client disconnected. Total: ${io.engine.clientsCount}`);
+  });
+});
+
+app.set('io', io);
 
 // Health check route — includes DB connection state for deployment diagnostics
 app.get('/health', (req, res) => {
@@ -91,3 +149,4 @@ app.use((req, res, next) => {
 app.use(errorHandler);
 
 export default app;
+export { server, io };

@@ -1,6 +1,7 @@
 import React, { createContext, useState, useEffect, useContext, useRef } from 'react';
 import { WifiOff } from 'lucide-react';
 import { api } from '../utils/api';
+import { createSocket } from '../utils/socket';
 import { flushQueue } from '../utils/offlineQueue';
 import { translations } from '../utils/translations';
 
@@ -363,10 +364,60 @@ export function AppProvider({ children }) {
     // Initial fetch
     fetchData();
 
-    // Adaptive 8-second polling interval (prevents network congestion when multiple devices are active)
+    // Adaptive 8-second polling interval (fallback — real-time sync arrives via socket)
     const interval = setInterval(fetchData, 8000);
     return () => clearInterval(interval);
   }, [token, user, patientEpisode?.episodeId]);
+
+  // Force refresh — fetches all role-relevant data immediately
+  const refreshData = async () => {
+    if (!token || !user) return;
+    try {
+      if (user.role === 'ADMIN') {
+        setBeds(await api.get('/beds'));
+        setPatients(await api.get('/patients'));
+        setAmbulanceRequests(await api.get('/ambulance'));
+        setInventory(await api.get('/inventory'));
+        setAmbulanceVehicles(await api.get('/ambulance/vehicles'));
+        setDoctors(await api.get('/doctors'));
+        setBloodBank(await api.get('/bloodbank'));
+        setSurgeries(await api.get('/surgeries'));
+        setDonorsList(await api.get('/bloodbank/donors-list'));
+      } else if (user.role === 'DOCTOR') {
+        setDoctorNotifications(await api.get(`/notifications/${user.id}`));
+        setDoctors(await api.get('/doctors'));
+      } else if (user.role === 'PATIENT' && user.patientId) {
+        const [eps, docs, dcs] = await Promise.all([
+          api.get(`/episodes?patientId=${user.patientId}`),
+          api.get(`/patients/${user.patientId}/documents`),
+          api.get('/doctors')
+        ]);
+        setPatientEpisode(eps.find(e => e.status === 'ACTIVE') || eps[eps.length - 1] || null);
+        setPatientDocuments(docs || []);
+        setDoctors(dcs || []);
+      }
+    } catch (_) {}
+  };
+
+  // Real-time sync: server broadcasts 'sync' after every successful mutation
+  // (from any device, any role) -> debounced instant refetch. Polling stays as fallback.
+  const syncDebounceRef = useRef(null);
+  useEffect(() => {
+    if (!token) return;
+    const socket = createSocket(token);
+    socket.on('sync', () => {
+      clearTimeout(syncDebounceRef.current);
+      syncDebounceRef.current = setTimeout(() => refreshDataRef.current?.(), 250);
+    });
+    return () => {
+      clearTimeout(syncDebounceRef.current);
+      socket.disconnect();
+    };
+  }, [token]);
+
+  // Stable ref so the socket handler always calls the latest refreshData
+  const refreshDataRef = useRef(refreshData);
+  refreshDataRef.current = refreshData;
 
   return (
     <AppContext.Provider value={{
@@ -400,35 +451,7 @@ export function AppProvider({ children }) {
       donorsList,
       
       // Force refresh trigger helper
-      refreshData: async () => {
-        // manually trigger a sync
-        if (!token || !user) return;
-        try {
-          if (user.role === 'ADMIN') {
-            setBeds(await api.get('/beds'));
-            setPatients(await api.get('/patients'));
-            setAmbulanceRequests(await api.get('/ambulance'));
-            setInventory(await api.get('/inventory'));
-            setAmbulanceVehicles(await api.get('/ambulance/vehicles'));
-            setDoctors(await api.get('/doctors'));
-            setBloodBank(await api.get('/bloodbank'));
-            setSurgeries(await api.get('/surgeries'));
-            setDonorsList(await api.get('/bloodbank/donors-list'));
-          } else if (user.role === 'DOCTOR') {
-            setDoctorNotifications(await api.get(`/notifications/${user.id}`));
-            setDoctors(await api.get('/doctors'));
-          } else if (user.role === 'PATIENT' && user.patientId) {
-            const [eps, docs, dcs] = await Promise.all([
-              api.get(`/episodes?patientId=${user.patientId}`),
-              api.get(`/patients/${user.patientId}/documents`),
-              api.get('/doctors')
-            ]);
-            setPatientEpisode(eps.find(e => e.status === 'ACTIVE') || eps[eps.length - 1] || null);
-            setPatientDocuments(docs || []);
-            setDoctors(dcs || []);
-          }
-        } catch (_) {}
-      }
+      refreshData
     }}>
       {children}
 
