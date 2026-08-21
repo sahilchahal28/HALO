@@ -11,7 +11,7 @@ import {
 export default function PatientDashboard() {
   const { 
     user, login, logout, exitApp, t, language, setLanguage, 
-    patientEpisode, patientProfile, addToast, refreshData, patientDocuments 
+    patientEpisode, patientProfile, addToast, refreshData, patientDocuments, doctors 
   } = useApp();
 
   const [activeTab, setActiveTabState] = useState(() => {
@@ -886,22 +886,34 @@ export default function PatientDashboard() {
                 <Phone size={15} className="text-primary" /> {t('callDoctor')}
               </h3>
 
-              {patientEpisode?.requiresAttention ? (
-                <div className="space-y-3">
-                  <div className="p-3 bg-green-50 border border-green-200 text-[#1f8a65] text-xs rounded-[11px] leading-relaxed flex items-start gap-2">
-                    <Info size={14} className="shrink-0 mt-0.5" />
-                    <span>{t('requiresAttentionActive')}</span>
+              {patientEpisode?.requiresAttention ? (() => {
+                const assignedDoctor = doctors.find(d => d.doctorId === patientEpisode?.doctorId);
+                const callDoctorPhone = patientEpisode?.doctorPhone || assignedDoctor?.phone || '';
+                const callDoctorName = patientEpisode?.doctorName || assignedDoctor?.name || 'Your Doctor';
+                
+                return (
+                  <div className="space-y-3">
+                    <div className="p-3 bg-green-50 border border-green-200 text-[#1f8a65] text-xs rounded-[11px] leading-relaxed flex items-start gap-2">
+                      <Info size={14} className="shrink-0 mt-0.5" />
+                      <span>{t('requiresAttentionActive')}</span>
+                    </div>
+                    
+                    {/* Dynamic Call Button — connects directly to the doctor who scanned the QR code */}
+                    <a
+                      href={callDoctorPhone ? `tel:${callDoctorPhone}` : '#'}
+                      onClick={(e) => {
+                        if (!callDoctorPhone) {
+                          e.preventDefault();
+                          addToast('Doctor phone number not configured.', 'error');
+                        }
+                      }}
+                      className="w-full bg-primary hover:bg-primary-focus text-canvas py-3.5 rounded-full text-xs font-semibold transition-colors uppercase text-center block cursor-pointer"
+                    >
+                      Call Consultant: {callDoctorName}
+                    </a>
                   </div>
-                  
-                  {/* Dynamic Call Button — uses the doctor from the active episode */}
-                  <a
-                    href={`tel:${patientEpisode?.doctorPhone || ''}`}
-                    className="w-full bg-primary hover:bg-primary-focus text-canvas py-3.5 rounded-full text-xs font-semibold transition-colors uppercase text-center block cursor-pointer"
-                  >
-                    Call Consultant: {patientEpisode?.doctorName || 'Your Doctor'}
-                  </a>
-                </div>
-              ) : (
+                );
+              })() : (
                 <div className="p-3 bg-canvas-parchment border border-hairline text-ink-muted-85 text-xs rounded-[11px] leading-relaxed flex items-start gap-2">
                   <Info size={14} className="shrink-0 mt-0.5 text-ink-muted-48" />
                   <span>{t('requiresAttentionInactive')}</span>

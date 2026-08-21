@@ -173,24 +173,71 @@ export default function DoctorDashboard() {
     loadEpisodeAndTimeline();
   }, [selectedPatient, activeTab]);
 
-  const handlePatientFound = (patient) => {
+  const handlePatientFound = async (patient) => {
     if (patient && patient.patientId) {
       if (!activePatientIds.includes(patient.patientId)) {
         setActivePatientIds(prev => [...prev, patient.patientId]);
       }
       setSelectedPatient(patient);
       setActiveTab('patientView');
+
+      // Assign scanning doctor & registered phone number to patient's active treatment episode
+      try {
+        const eps = await api.get(`/episodes?patientId=${patient.patientId}`);
+        const active = eps.find(e => e.status === 'ACTIVE');
+        const docId = user?.id || user?._id;
+        const currentDoctor = doctors.find(d => d.doctorId === docId) || user;
+        const phone = currentDoctor?.phone || user?.phone || '';
+
+        if (active && docId) {
+          const updated = await api.put(`/episodes/${active.episodeId}`, {
+            doctorId: docId,
+            doctorName: currentDoctor?.name || user?.name || '',
+            doctorPhone: phone
+          });
+          setActiveEpisode(updated);
+        }
+      } catch (_) {}
     }
   };
 
   const handleToggleAttention = async (requiresAttention) => {
-    if (!activeEpisode) return;
+    let epToUpdate = activeEpisode;
+
+    // Create treatment episode if patient has no active episode yet
+    if (!epToUpdate && selectedPatient) {
+      try {
+        const docId = user?.id || user?._id;
+        epToUpdate = await api.post('/episodes', {
+          patientId: selectedPatient.patientId,
+          doctorId: docId
+        });
+        setActiveEpisode(epToUpdate);
+      } catch (err) {
+        addToast(err.message || 'Failed to initialize treatment episode for patient.', 'error');
+        return;
+      }
+    }
+
+    if (!epToUpdate) return;
+
     try {
-      const updated = await api.put(`/episodes/${activeEpisode.episodeId}`, { requiresAttention });
+      const docId = user?.id || user?._id;
+      const currentDoctor = doctors.find(d => d.doctorId === docId) || user;
+      const phone = currentDoctor?.phone || user?.phone || '';
+      const doctorName = currentDoctor?.name || user?.name || '';
+
+      const updated = await api.put(`/episodes/${epToUpdate.episodeId}`, {
+        requiresAttention,
+        doctorId: docId,
+        doctorName,
+        doctorPhone: phone
+      });
+
       setActiveEpisode(updated);
       addToast(
         requiresAttention 
-          ? "Attention line active! Patient 'Call Doctor' unlocked." 
+          ? `Attention line active! Direct call enabled for Dr. ${doctorName}.` 
           : "Attention line disabled.",
         requiresAttention ? "success" : "info"
       );
