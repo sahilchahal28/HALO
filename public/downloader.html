@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <title>HALO Native App Registry</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    
+    <!-- NOT a PWA — this is just the install landing page -->
+    <meta name="theme-color" content="#0a0a0c" />
+    
+    <style>
+      :root {
+        --canvas: #0a0a0c;
+        --canvas-card: #141418;
+        --border: #26262e;
+        --text: #f5f5f7;
+        --text-muted: #8e8e93;
+        --primary: #0066cc;
+        --primary-hover: #0077ed;
+        --doctor: #863bff;
+        --patient: #0066cc;
+        --accent-green: #30d158;
+      }
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        background-color: var(--canvas);
+        color: var(--text);
+        font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-height: 100vh;
+        padding: 20px;
+        text-align: center;
+        -webkit-font-smoothing: antialiased;
+      }
+      .container {
+        max-width: 460px;
+        width: 100%;
+        background-color: var(--canvas-card);
+        border: 1px solid var(--border);
+        border-radius: 28px;
+        padding: 36px 24px;
+        box-shadow: 0 24px 48px rgba(0, 0, 0, 0.6);
+      }
+      .logo {
+        width: 68px;
+        height: 68px;
+        background: linear-gradient(135deg, var(--primary), var(--doctor));
+        border-radius: 18px;
+        margin: 0 auto 20px auto;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 8px 24px rgba(0, 102, 204, 0.35);
+      }
+      .logo svg {
+        width: 36px;
+        height: 36px;
+        fill: white;
+      }
+      h1 {
+        font-size: 22px;
+        font-weight: 700;
+        letter-spacing: -0.4px;
+        margin-bottom: 6px;
+      }
+      .subtitle {
+        font-size: 13px;
+        color: var(--text-muted);
+        line-height: 1.5;
+        margin-bottom: 24px;
+      }
+      .options-grid {
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+        margin-bottom: 28px;
+      }
+      .btn {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        padding: 18px 20px;
+        border-radius: 20px;
+        text-decoration: none;
+        color: white;
+        font-weight: 600;
+        font-size: 15px;
+        transition: all 0.2s ease;
+        border: 1px solid transparent;
+        cursor: pointer;
+      }
+      .btn-doctor {
+        background: linear-gradient(135deg, var(--doctor), #6022c4);
+        box-shadow: 0 6px 18px rgba(134, 59, 255, 0.3);
+      }
+      .btn-doctor:active {
+        transform: scale(0.98);
+      }
+      .btn-patient {
+        background: linear-gradient(135deg, var(--patient), #004d99);
+        box-shadow: 0 6px 18px rgba(0, 102, 204, 0.3);
+      }
+      .btn-patient:active {
+        transform: scale(0.98);
+      }
+      .btn span {
+        font-size: 11px;
+        font-weight: 400;
+        opacity: 0.85;
+        margin-top: 4px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      }
+      .install-card {
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid var(--border);
+        border-radius: 18px;
+        padding: 18px;
+        text-align: left;
+        font-size: 12px;
+        color: var(--text-muted);
+        line-height: 1.6;
+      }
+      .install-card h3 {
+        font-size: 13px;
+        color: var(--text);
+        margin-bottom: 10px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-weight: 600;
+      }
+      .install-card ol {
+        padding-left: 18px;
+        margin-bottom: 12px;
+      }
+      .install-card li {
+        margin-bottom: 6px;
+      }
+      .highlight {
+        color: var(--text);
+        font-weight: 600;
+      }
+      .badge-standalone {
+        display: inline-block;
+        background: rgba(48, 209, 88, 0.15);
+        color: var(--accent-green);
+        border: 1px solid rgba(48, 209, 88, 0.3);
+        padding: 4px 10px;
+        border-radius: 20px;
+        font-size: 11px;
+        font-weight: 600;
+        margin-bottom: 16px;
+      }
+      .footer-credit {
+        margin-top: 20px;
+        font-size: 11px;
+        color: var(--text-muted);
+        letter-spacing: 0.5px;
+        text-transform: uppercase;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="logo">
+        <svg viewBox="0 0 48 46">
+          <path d="M25.946 44.938c-.664.845-2.021.375-2.021-.698V33.937a2.26 2.26 0 0 0-2.262-2.262H10.287c-.92 0-1.456-1.04-.92-1.788l7.48-10.471c1.07-1.497 0-3.578-1.842-3.578H1.237c-.92 0-1.456-1.04-.92-1.788L10.013.474c.214-.297.556-.474.92-.474h28.894c.92 0 1.456 1.04.92 1.788l-7.48 10.471c-1.07 1.498 0 3.579 1.842 3.579h11.377c.943 0 1.473 1.088.89 1.83L25.947 44.94z"/>
+        </svg>
+      </div>
+      
+      <h1>HALO Native App Registry</h1>
+      <p class="subtitle">Select your clinical portal to launch and install as a native standalone app.</p>
+      
+      <div class="options-grid">
+        <a href="/doctor" class="btn btn-doctor">
+          🧑‍⚕️ Doctor Portal App
+          <span>Launch & Install /doctor standalone</span>
+        </a>
+        <a href="/patient" class="btn btn-patient">
+          🧑 Patient Portal App
+          <span>Launch & Install /patient standalone</span>
+        </a>
+      </div>
+      
+      <div class="install-card">
+        <h3>📲 How to install as Native App (No Browser):</h3>
+        <ol>
+          <li>Tap on <strong>Doctor</strong> or <strong>Patient</strong> button above to open the portal.</li>
+          <li><strong>On Android (Chrome)</strong>: Tap the <span class="highlight">"Install"</span> banner at the top (or tap Chrome menu <strong>⋮</strong> &rarr; <span class="highlight">"Install App"</span>).</li>
+          <li><strong>On iPhone (Safari)</strong>: Tap the Share button (<span class="highlight">⬆️</span>) at the bottom, scroll down, and tap <span class="highlight">"Add to Home Screen" (➕)</span>.</li>
+          <li>Open the newly installed app from your home screen to use it in <strong>100% full-screen native mode</strong>!</li>
+        </ol>
+      </div>
+    </div>
+    
+    <div class="footer-credit">HALO Healthcare Connected Care</div>
+
+    <script>
+      // Save the server IP so installed PWAs can reach the backend
+      // even after the HTTPS tunnel (localhost.run) goes down.
+      (async function saveServerIp() {
+        try {
+          const res = await fetch('/api/server-info');
+          if (res.ok) {
+            const data = await res.json();
+            if (data.lanIp) {
+              localStorage.setItem('halo_server_ip', data.lanIp);
+              console.log('[HALO] Saved server IP:', data.lanIp);
+            }
+          }
+        } catch (_) {
+          // If we can't get server info, try to use the current hostname
+          const h = window.location.hostname;
+          if (/^\d+\.\d+\.\d+\.\d+$/.test(h)) {
+            localStorage.setItem('halo_server_ip', h);
+            console.log('[HALO] Saved hostname as server IP:', h);
+          }
+        }
+      })();
+    </script>
+  </body>
+</html>

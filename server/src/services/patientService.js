@@ -1,0 +1,265 @@
+import Patient from '../models/Patient.js';
+import Doctor from '../models/Doctor.js';
+import TreatmentEpisode from '../models/TreatmentEpisode.js';
+import MedicalDocument from '../models/MedicalDocument.js';
+import { generatePatientId } from '../utils/patientIdGenerator.js';
+import { generateEpisodeId } from '../utils/episodeIdGenerator.js';
+import { generateQrToken } from '../utils/qrTokenGenerator.js';
+import { logAction } from './auditService.js';
+
+export async function registerPatient(patientData, actor) {
+  const cleanAadhaar = String(patientData.aadhaarNumber || '').replace(/\D/g, '');
+  if (!cleanAadhaar || cleanAadhaar.length !== 12) {
+    const err = new Error('A valid 12-digit Aadhaar number is mandatory for registration.');
+    err.statusCode = 400;
+    throw err;
+  }
+
+  // Enforce unique Aadhaar check across patients (names can be identical, but Aadhaar must be unique)
+  const existingPatient = await Patient.findOne({ aadhaarNumber: cleanAadhaar });
+  if (existingPatient) {
+    const formattedAadhaar = cleanAadhaar.replace(/(\d{4})(\d{4})(\d{4})/, '$1 $2 $3');
+    const err = new Error(`A patient with Aadhaar number ${formattedAadhaar} is already registered (Patient ID: ${existingPatient.patientId}, Name: ${existingPatient.fullName}). Duplicate registration is not permitted.`);
+    err.statusCode = 409;
+    throw err;
+  }
+
+  const count = await Patient.countDocuments();
+  const patientId = await generatePatientId();
+  const qrCodeToken = generateQrToken(patientData.name, count);
+
+  // Parse arrays
+  const allergies = Array.isArray(patientData.allergies) 
+    ? patientData.allergies 
+    : patientData.allergies ? patientData.allergies.split(',').map(s => s.trim()) : [];
+  const medicalHistory = Array.isArray(patientData.medicalHistory) 
+    ? patientData.medicalHistory 
+    : patientData.medicalHistory ? patientData.medicalHistory.split(',').map(s => s.trim()) : [];
+
+  const patient = new Patient({
+    patientId,
+    aadhaarNumber: cleanAadhaar,
+    fullName: patientData.name, // maps to fullName in Mongoose schema
+    phone: patientData.phone,
+    dateOfBirth: patientData.dob,
+    age: Number(patientData.age),
+    gender: patientData.gender,
+    bloodGroup: patientData.bloodGroup,
+    address: patientData.address,
+    emergencyContact: patientData.emergencyContact,
+    allergies,
+    medicalHistory,
+    qrCodeToken
+  });
+
+  await patient.save();
+
+  await logAction({
+    actor: actor || 'admin',
+    action: 'Patient registered',
+    entityType: 'Patient',
+    entityId: patientId,
+    metadata: { patientId, name: patientData.name }
+  });
+
+  return patient;
+}
+
+export async function getPatients() {
+  return await Patient.find({}).populate('assignedDoctor');
+}
+
+export async function lookupPatient({ token, patientId }) {
+  let patient = null;
+  if (token) {
+    patient = await Patient.findOne({ status: { $ne: 'INACTIVE' }, qrCodeToken: token }).populate('assignedDoctor');
+  } else if (patientId) {
+    const cleanId = String(patientId).trim().toUpperCase();
+    patient = await Patient.findOne({ status: { $ne: 'INACTIVE' }, patientId: cleanId }).populate('assignedDoctor');
+  }
+  return patient;
+}
+
+export async function getPatientById(patientId) {
+  const cleanId = String(patientId).trim().toUpperCase();
+  return await Patient.findOne({ patientId: cleanId }).populate('assignedDoctor');
+}
+
+export async function updatePatient(patientId, updateData, actor) {
+  const cleanId = String(patientId).trim().toUpperCase();
+  const patient = await Patient.findOne({ patientId: cleanId });
+  if (!patient) throw new Error('Patient not found');
+
+  if (updateData.name) patient.fullName = updateData.name;
+  if (updateData.fullName) patient.fullName = updateData.fullName;
+  if (updateData.phone) patient.phone = updateData.phone;
+  if (updateData.age) patient.age = Number(updateData.age);
+  if (updateData.gender) patient.gender = updateData.gender;
+  if (updateData.dob) patient.dateOfBirth = updateData.dob;
+  if (updateData.bloodGroup) patient.bloodGroup = updateData.bloodGroup;
+  if (updateData.address) patient.address = updateData.address;
+  if (updateData.status) patient.status = updateData.status;
+
+  if (updateData.emergencyContact) {
+    patient.emergencyContact = {
+      name: updateData.emergencyContact.name || patient.emergencyContact.name,
+      phone: updateData.emergencyContact.phone || patient.emergencyContact.phone,
+      relation: updateData.emergencyContact.relation || patient.emergencyContact.relation
+    };
+  }
+
+  if (updateData.allergies) {
+    patient.allergies = Array.isArray(updateData.allergies)
+      ? updateData.allergies
+      : updateData.allergies.split(',').map(s => s.trim());
+  }
+
+  if (updateData.medicalHistory) {
+    patient.medicalHistory = Array.isArray(updateData.medicalHistory)
+      ? updateData.medicalHistory
+      : updateData.medicalHistory.split(',').map(s => s.trim());
+  }
+
+  await patient.save();
+
+  await logAction({
+    actor: actor || 'admin',
+    action: `Patient profile updated: ${updateData.status ? 'Status to ' + updateData.status : 'details changed'}`,
+    entityType: 'Patient',
+    entityId: patientId,
+    metadata: { updateData }
+  });
+
+  return patient.populate('assignedDoctor');
+}
+
+export async function assignDoctor(patientId, doctorId, actor) {
+  const patient = await Patient.findOne({ patientId });
+  if (!patient) throw new Error('Patient not found');
+
+  const doctor = await Doctor.findOne({ doctorId });
+  if (!doctor) throw new Error('Doctor not found');
+
+  patient.assignedDoctor = doctor._id;
+  await patient.save();
+
+  // Update active Treatment Episode if one exists
+  const activeEpisode = await TreatmentEpisode.findOne({ patientId, status: 'ACTIVE' });
+  if (activeEpisode) {
+    activeEpisode.doctorId = doctor.doctorId;
+    activeEpisode.doctorName = doctor.name;
+    await activeEpisode.save();
+  }
+
+  await logAction({
+    actor: actor || 'admin',
+    action: 'Doctor Assigned',
+    entityType: 'Patient',
+    entityId: patientId,
+    metadata: { doctorId: doctor.doctorId, doctorName: doctor.name }
+  });
+
+  return patient.populate('assignedDoctor');
+}
+
+export async function admitPatient({ patientId, department, doctorId, reason }, actor) {
+  const patient = await Patient.findOne({ patientId });
+  if (!patient) throw new Error('Patient not found');
+
+  const doctor = await Doctor.findOne({ doctorId });
+  if (!doctor) throw new Error('Doctor not found');
+
+  // Change patient status to ADMITTED, set department and doctor
+  patient.status = 'ADMITTED';
+  patient.department = department;
+  patient.assignedDoctor = doctor._id;
+  await patient.save();
+
+  // Find or create active Treatment Episode
+  let activeEpisode = await TreatmentEpisode.findOne({ patientId, status: 'ACTIVE' });
+  if (!activeEpisode) {
+    const episodeId = await generateEpisodeId();
+
+    activeEpisode = new TreatmentEpisode({
+      episodeId,
+      patientId,
+      patientName: patient.fullName,
+      doctorId: doctor.doctorId,
+      doctorName: doctor.name,
+      status: 'ACTIVE',
+      currentStage: 'ADMISSION',
+      reason: reason || 'Inpatient Admission',
+      department
+    });
+  } else {
+    activeEpisode.currentStage = 'ADMISSION';
+    activeEpisode.department = department;
+    activeEpisode.doctorId = doctor.doctorId;
+    activeEpisode.doctorName = doctor.name;
+    if (reason) activeEpisode.reason = reason;
+  }
+  await activeEpisode.save();
+
+  await logAction({
+    actor: actor || 'admin',
+    action: 'Patient Admitted',
+    entityType: 'Patient',
+    entityId: patientId,
+    metadata: { department, doctorName: doctor.name, episodeId: activeEpisode.episodeId }
+  });
+
+  return patient.populate('assignedDoctor');
+}
+
+export async function getPatientDocuments(patientId) {
+  return await MedicalDocument.find({ patientId }).sort({ createdAt: -1 });
+}
+
+export async function addPatientDocument(patientId, docData, actor) {
+  const patient = await Patient.findOne({ patientId });
+  if (!patient) throw new Error('Patient not found');
+
+  const count = await MedicalDocument.countDocuments();
+  const documentId = `DOC-${10000 + count}`;
+
+  const document = new MedicalDocument({
+    documentId,
+    patientId,
+    treatmentEpisodeId: docData.treatmentEpisodeId || null,
+    type: docData.type,
+    title: docData.title,
+    fileRef: docData.fileRef || 'placeholder_file_url',
+    uploadedBy: actor || 'admin'
+  });
+
+  await document.save();
+
+  await logAction({
+    actor: actor || 'admin',
+    action: 'Document Uploaded',
+    entityType: 'Patient',
+    entityId: patientId,
+    metadata: { title: docData.title, type: docData.type, documentId }
+  });
+
+  return document;
+}
+
+export async function deletePatient(patientId, actor) {
+  const patient = await Patient.findOne({ patientId });
+  if (!patient) throw new Error('Patient not found');
+
+  await Patient.deleteOne({ patientId });
+  await TreatmentEpisode.deleteMany({ patientId });
+  await MedicalDocument.deleteMany({ patientId });
+
+  await logAction({
+    actor: actor || 'admin',
+    action: 'Patient record deleted',
+    entityType: 'Patient',
+    entityId: patientId,
+    metadata: { patientId, name: patient.fullName }
+  });
+
+  return { success: true, patientId };
+}

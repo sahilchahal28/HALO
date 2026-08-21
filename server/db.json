@@ -1,0 +1,462 @@
+{
+  "users": [
+    {
+      "_id": "USE-206282",
+      "id": "USE-190574",
+      "createdAt": "2026-08-18T19:57:53.946Z",
+      "updatedAt": "2026-08-18T19:57:53.948Z",
+      "username": "admin",
+      "password": "$2b$10$4GCbOtTS6ET5TCLIrKhf0u2E0x7/6GC2gwzhABcNU0ye4tOkbAShe",
+      "role": "ADMIN",
+      "name": "Sarah Jenkins (Admin)",
+      "phone": "+91 90000 12345"
+    },
+    {
+      "_id": "USE-161389",
+      "id": "USE-142276",
+      "createdAt": "2026-08-18T19:57:53.948Z",
+      "updatedAt": "2026-08-18T19:57:53.948Z",
+      "username": "doctor1",
+      "password": "$2b$10$zyv/mlTbomXfN5ev9cwZfuGX11KCq36wbpXIxafm8LutBMg9Ilwaq",
+      "role": "DOCTOR",
+      "name": "Dr. Ananya Iyer",
+      "phone": "+91 99999 88888",
+      "specialty": "Cardiology / Critical Care",
+      "department": "ICU"
+    },
+    {
+      "_id": "USE-239487",
+      "id": "USE-897875",
+      "createdAt": "2026-08-18T19:57:53.948Z",
+      "updatedAt": "2026-08-18T19:57:53.948Z",
+      "username": "doctor2",
+      "password": "$2b$10$zyv/mlTbomXfN5ev9cwZfuGX11KCq36wbpXIxafm8LutBMg9Ilwaq",
+      "role": "DOCTOR",
+      "name": "Dr. Vikram Malhotra",
+      "phone": "+91 88888 77777",
+      "specialty": "General Surgery",
+      "department": "OT"
+    },
+    {
+      "_id": "USE-166333",
+      "id": "USE-944312",
+      "createdAt": "2026-08-18T19:57:53.948Z",
+      "updatedAt": "2026-08-18T19:57:53.948Z",
+      "username": "patient1",
+      "password": "$2b$10$O61yJCqAJqMKDnRHoUy2QOTBi37j03JKqJmpbIY9yXtvz/H6NDGk.",
+      "role": "PATIENT",
+      "name": "Rahul Sharma",
+      "phone": "+91 98765 00001",
+      "patientId": "HALO-P-10294",
+      "age": 34,
+      "gender": "Male",
+      "dob": "1992-05-12",
+      "bloodGroup": "O-",
+      "address": "Flat 402, Sector 15, Dwarka, New Delhi - 110075",
+      "emergencyContact": {
+        "name": "Sunita Sharma",
+        "phone": "+91 98765 00002",
+        "relation": "Spouse"
+      },
+      "allergies": [
+        "Penicillin",
+        "Dust Mites"
+      ],
+      "medicalHistory": [
+        "Hypertension (diagnosed 2023)",
+        "Appendectomy (2018)"
+      ],
+      "qrCodeToken": "token_rahul_sharma_halo_10294"
+    }
+  ],
+  "episodes": [
+    {
+      "_id": "EPI-113140",
+      "id": "EPI-397278",
+      "createdAt": "2026-08-18T19:57:53.951Z",
+      "updatedAt": "2026-08-18T19:57:53.951Z",
+      "episodeId": "EP-2026-00091",
+      "patientId": "HALO-P-10294",
+      "patientName": "Rahul Sharma",
+      "doctorId": "USE-142276",
+      "doctorName": "Dr. Ananya Iyer",
+      "status": "ACTIVE",
+      "requiresAttention": false,
+      "consultations": [
+        {
+          "date": "2026-08-18T19:57:53.951Z",
+          "notes": "Patient presented with mild chest discomfort and fatigue. History of controlled hypertension.",
+          "diagnosis": "Chest Discomfort under evaluation"
+        }
+      ],
+      "prescriptions": [
+        {
+          "date": "2026-08-18T19:57:53.951Z",
+          "medicine": "Metoprolol Succinate",
+          "dosage": "25 mg",
+          "frequency": "0-0-1",
+          "duration": "30 days",
+          "isDigitized": true
+        }
+      ],
+      "tests": [
+        {
+          "name": "Electrocardiogram (ECG)",
+          "status": "COMPLETED",
+          "result": "Sinus rhythm, slight left ventricular hypertrophy",
+          "date": "2026-08-18T19:57:53.951Z"
+        },
+        {
+          "name": "Serum Troponin I",
+          "status": "COMPLETED",
+          "result": "< 0.01 ng/mL (Normal)",
+          "date": "2026-08-18T19:57:53.951Z"
+        }
+      ],
+      "bedAssignment": {
+        "bedId": "",
+        "assignedAt": null
+      },
+      "messages": [
+        {
+          "sender": "DOCTOR",
+          "text": "Please ensure you check in at the front desk for your ECG evaluation today.",
+          "timestamp": "2026-08-18T19:57:53.951Z"
+        }
+      ]
+    }
+  ],
+  "beds": [
+    {
+      "_id": "BED-896266",
+      "id": "BED-667491",
+      "createdAt": "2026-08-18T19:57:53.948Z",
+      "updatedAt": "2026-08-18T19:57:53.948Z",
+      "bedId": "ICU-01",
+      "department": "ICU",
+      "status": "AVAILABLE"
+    },
+    {
+      "_id": "BED-369864",
+      "id": "BED-347856",
+      "createdAt": "2026-08-18T19:57:53.948Z",
+      "updatedAt": "2026-08-18T19:57:53.948Z",
+      "bedId": "ICU-02",
+      "department": "ICU",
+      "status": "AVAILABLE"
+    },
+    {
+      "_id": "BED-416297",
+      "id": "BED-714935",
+      "createdAt": "2026-08-18T19:57:53.948Z",
+      "updatedAt": "2026-08-18T19:57:53.948Z",
+      "bedId": "ICU-03",
+      "department": "ICU",
+      "status": "AVAILABLE"
+    },
+    {
+      "_id": "BED-634677",
+      "id": "BED-827281",
+      "createdAt": "2026-08-18T19:57:53.948Z",
+      "updatedAt": "2026-08-18T19:57:53.948Z",
+      "bedId": "ICU-04",
+      "department": "ICU",
+      "status": "CLEANING"
+    },
+    {
+      "_id": "BED-826013",
+      "id": "BED-686953",
+      "createdAt": "2026-08-18T19:57:53.948Z",
+      "updatedAt": "2026-08-18T19:57:53.948Z",
+      "bedId": "CCU-01",
+      "department": "CCU",
+      "status": "AVAILABLE"
+    },
+    {
+      "_id": "BED-925171",
+      "id": "BED-879099",
+      "createdAt": "2026-08-18T19:57:53.948Z",
+      "updatedAt": "2026-08-18T19:57:53.948Z",
+      "bedId": "CCU-02",
+      "department": "CCU",
+      "status": "AVAILABLE"
+    },
+    {
+      "_id": "BED-290248",
+      "id": "BED-637670",
+      "createdAt": "2026-08-18T19:57:53.948Z",
+      "updatedAt": "2026-08-18T19:57:53.948Z",
+      "bedId": "GEN-01",
+      "department": "General Ward",
+      "status": "AVAILABLE"
+    },
+    {
+      "_id": "BED-463269",
+      "id": "BED-410219",
+      "createdAt": "2026-08-18T19:57:53.948Z",
+      "updatedAt": "2026-08-18T19:57:53.948Z",
+      "bedId": "GEN-02",
+      "department": "General Ward",
+      "status": "AVAILABLE"
+    },
+    {
+      "_id": "BED-691138",
+      "id": "BED-380822",
+      "createdAt": "2026-08-18T19:57:53.949Z",
+      "updatedAt": "2026-08-18T19:57:53.949Z",
+      "bedId": "GEN-03",
+      "department": "General Ward",
+      "status": "AVAILABLE"
+    },
+    {
+      "_id": "BED-188546",
+      "id": "BED-511272",
+      "createdAt": "2026-08-18T19:57:53.949Z",
+      "updatedAt": "2026-08-18T19:57:53.949Z",
+      "bedId": "PVT-01",
+      "department": "Private Ward",
+      "status": "AVAILABLE"
+    },
+    {
+      "_id": "BED-449201",
+      "id": "BED-938367",
+      "createdAt": "2026-08-18T19:57:53.949Z",
+      "updatedAt": "2026-08-18T19:57:53.949Z",
+      "bedId": "PVT-02",
+      "department": "Private Ward",
+      "status": "AVAILABLE"
+    }
+  ],
+  "ambulance": [],
+  "inventory": [
+    {
+      "_id": "INV-938580",
+      "id": "INV-770657",
+      "createdAt": "2026-08-18T19:57:53.951Z",
+      "updatedAt": "2026-08-18T19:57:53.951Z",
+      "itemId": "INV-AMOX-500",
+      "name": "Amoxicillin 500mg",
+      "sku": "MED-AMOX-500",
+      "category": "Medicines",
+      "quantity": 4,
+      "unit": "vials",
+      "minStockLevel": 10,
+      "location": "Central Pharmacy",
+      "supplier": "Cipla Healthcare"
+    },
+    {
+      "_id": "INV-148307",
+      "id": "INV-779245",
+      "createdAt": "2026-08-18T19:57:53.951Z",
+      "updatedAt": "2026-08-18T19:57:53.951Z",
+      "itemId": "INV-PARA-650",
+      "name": "Paracetamol 650mg",
+      "sku": "MED-PARA-650",
+      "category": "Medicines",
+      "quantity": 150,
+      "unit": "tablets",
+      "minStockLevel": 30,
+      "location": "Central Pharmacy",
+      "supplier": "Sun Pharma"
+    },
+    {
+      "_id": "INV-561233",
+      "id": "INV-311227",
+      "createdAt": "2026-08-18T19:57:53.951Z",
+      "updatedAt": "2026-08-18T19:57:53.951Z",
+      "itemId": "INV-GLOV-75",
+      "name": "Surgical Gloves (Size 7.5)",
+      "sku": "CON-GLOV-75",
+      "category": "Surgical Supplies",
+      "quantity": 8,
+      "unit": "pairs",
+      "minStockLevel": 20,
+      "location": "OT",
+      "supplier": "SafeTouch Ltd"
+    },
+    {
+      "_id": "INV-179563",
+      "id": "INV-670425",
+      "createdAt": "2026-08-18T19:57:53.951Z",
+      "updatedAt": "2026-08-18T19:57:53.951Z",
+      "itemId": "INV-IVIN-01",
+      "name": "IV Infusion Set",
+      "sku": "SUP-IVIN-01",
+      "category": "Consumables",
+      "quantity": 45,
+      "unit": "pieces",
+      "minStockLevel": 15,
+      "location": "Emergency",
+      "supplier": "Becton Dickinson"
+    },
+    {
+      "_id": "INV-888572",
+      "id": "INV-585806",
+      "createdAt": "2026-08-18T19:57:53.951Z",
+      "updatedAt": "2026-08-18T19:57:53.951Z",
+      "itemId": "INV-ADRE-1ML",
+      "name": "Adrenaline Injection 1ml",
+      "sku": "MED-ADRE-1ML",
+      "category": "Emergency Supplies",
+      "quantity": 3,
+      "unit": "vials",
+      "minStockLevel": 8,
+      "location": "Emergency",
+      "supplier": "AstraZeneca"
+    }
+  ],
+  "bloodbank": [
+    {
+      "_id": "BLO-811521",
+      "id": "BLO-197823",
+      "createdAt": "2026-08-18T19:57:53.949Z",
+      "updatedAt": "2026-08-18T19:57:53.949Z",
+      "bloodGroup": "O-",
+      "unitsAvailable": 1,
+      "unitsReserved": 0
+    },
+    {
+      "_id": "BLO-789034",
+      "id": "BLO-595297",
+      "createdAt": "2026-08-18T19:57:53.949Z",
+      "updatedAt": "2026-08-18T19:57:53.949Z",
+      "bloodGroup": "O+",
+      "unitsAvailable": 12,
+      "unitsReserved": 2
+    },
+    {
+      "_id": "BLO-461966",
+      "id": "BLO-821112",
+      "createdAt": "2026-08-18T19:57:53.949Z",
+      "updatedAt": "2026-08-18T19:57:53.949Z",
+      "bloodGroup": "A-",
+      "unitsAvailable": 2,
+      "unitsReserved": 0
+    },
+    {
+      "_id": "BLO-193299",
+      "id": "BLO-964963",
+      "createdAt": "2026-08-18T19:57:53.949Z",
+      "updatedAt": "2026-08-18T19:57:53.949Z",
+      "bloodGroup": "A+",
+      "unitsAvailable": 8,
+      "unitsReserved": 1
+    },
+    {
+      "_id": "BLO-852003",
+      "id": "BLO-279680",
+      "createdAt": "2026-08-18T19:57:53.949Z",
+      "updatedAt": "2026-08-18T19:57:53.949Z",
+      "bloodGroup": "B-",
+      "unitsAvailable": 0,
+      "unitsReserved": 0
+    },
+    {
+      "_id": "BLO-315469",
+      "id": "BLO-474905",
+      "createdAt": "2026-08-18T19:57:53.950Z",
+      "updatedAt": "2026-08-18T19:57:53.950Z",
+      "bloodGroup": "B+",
+      "unitsAvailable": 14,
+      "unitsReserved": 3
+    },
+    {
+      "_id": "BLO-995234",
+      "id": "BLO-672362",
+      "createdAt": "2026-08-18T19:57:53.950Z",
+      "updatedAt": "2026-08-18T19:57:53.950Z",
+      "bloodGroup": "AB-",
+      "unitsAvailable": 1,
+      "unitsReserved": 0
+    },
+    {
+      "_id": "BLO-182091",
+      "id": "BLO-441302",
+      "createdAt": "2026-08-18T19:57:53.950Z",
+      "updatedAt": "2026-08-18T19:57:53.950Z",
+      "bloodGroup": "AB+",
+      "unitsAvailable": 5,
+      "unitsReserved": 0
+    }
+  ],
+  "donors": [
+    {
+      "_id": "DON-135964",
+      "id": "DON-634645",
+      "createdAt": "2026-08-18T19:57:53.950Z",
+      "updatedAt": "2026-08-18T19:57:53.950Z",
+      "donorId": "DONOR-001",
+      "name": "Rohan Sen",
+      "bloodGroup": "O-",
+      "phone": "+91 98111 22233",
+      "consentedToOutreach": true,
+      "isEligible": true
+    },
+    {
+      "_id": "DON-858946",
+      "id": "DON-674045",
+      "createdAt": "2026-08-18T19:57:53.950Z",
+      "updatedAt": "2026-08-18T19:57:53.950Z",
+      "donorId": "DONOR-002",
+      "name": "Preeti Deshmukh",
+      "bloodGroup": "O-",
+      "phone": "+91 98333 44455",
+      "consentedToOutreach": true,
+      "isEligible": true
+    },
+    {
+      "_id": "DON-276873",
+      "id": "DON-142003",
+      "createdAt": "2026-08-18T19:57:53.950Z",
+      "updatedAt": "2026-08-18T19:57:53.950Z",
+      "donorId": "DONOR-003",
+      "name": "Aman Verma",
+      "bloodGroup": "O-",
+      "phone": "+91 98222 33344",
+      "consentedToOutreach": false,
+      "isEligible": true
+    },
+    {
+      "_id": "DON-400018",
+      "id": "DON-670395",
+      "createdAt": "2026-08-18T19:57:53.950Z",
+      "updatedAt": "2026-08-18T19:57:53.950Z",
+      "donorId": "DONOR-004",
+      "name": "Kunal Nayyar",
+      "bloodGroup": "B-",
+      "phone": "+91 98555 66677",
+      "consentedToOutreach": true,
+      "isEligible": true
+    },
+    {
+      "_id": "DON-262244",
+      "id": "DON-739636",
+      "createdAt": "2026-08-18T19:57:53.950Z",
+      "updatedAt": "2026-08-18T19:57:53.950Z",
+      "donorId": "DONOR-005",
+      "name": "Shweta Tiwari",
+      "bloodGroup": "O-",
+      "phone": "+91 98444 55566",
+      "consentedToOutreach": true,
+      "isEligible": false
+    }
+  ],
+  "surgeries": [
+    {
+      "_id": "SUR-962150",
+      "id": "SUR-384424",
+      "createdAt": "2026-08-18T19:57:53.951Z",
+      "updatedAt": "2026-08-18T19:57:53.951Z",
+      "surgeryId": "SUR-001",
+      "patientId": "HALO-P-10294",
+      "patientName": "Rahul Sharma",
+      "procedure": "Laparoscopic Appendectomy (Post-op follow-up check)",
+      "doctorId": "USE-897875",
+      "doctorName": "Dr. Vikram Malhotra",
+      "operatingTheatre": "OT-01",
+      "time": "2026-08-19 14:30",
+      "status": "Scheduled"
+    }
+  ],
+  "notifications": []
+}

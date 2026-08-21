@@ -1,0 +1,139 @@
+@import "tailwindcss";
+
+@theme {
+  --color-canvas: #ffffff;
+  --color-canvas-parchment: #f5f5f7;
+  --color-surface-pearl: #fafafc;
+  --color-surface-tile-1: #272729;
+  --color-surface-tile-2: #2a2a2c;
+  --color-surface-tile-3: #252527;
+  --color-surface-black: #000000;
+  --color-surface-chip-translucent: rgba(210, 210, 215, 0.64);
+  
+  --color-primary: #0066cc;
+  --color-primary-focus: #0071e3;
+  --color-primary-on-dark: #2997ff;
+  
+  --color-ink: #1d1d1f;
+  --color-body: #1d1d1f;
+  --color-body-on-dark: #ffffff;
+  --color-body-muted: #cccccc;
+  
+  --color-divider-soft: #f0f0f0;
+  --color-hairline: #e0e0e0;
+  
+  --font-sans: "SF Pro Text", system-ui, -apple-system, BlinkMacSystemFont, "Inter", sans-serif;
+  --font-display: "SF Pro Display", system-ui, -apple-system, BlinkMacSystemFont, "Inter", sans-serif;
+}
+
+/* Base resets & styling */
+@layer base {
+  body {
+    background-color: #f5f5f7; /* canvas-parchment */
+    color: #1d1d1f; /* body */
+    font-family: "SF Pro Text", system-ui, -apple-system, BlinkMacSystemFont, "Inter", sans-serif;
+    font-size: 17px;
+    line-height: 1.47;
+    letter-spacing: -0.374px;
+    margin: 0;
+    padding: 0;
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    color: #1d1d1f; /* ink */
+    font-family: "SF Pro Display", system-ui, -apple-system, BlinkMacSystemFont, "Inter", sans-serif;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+  }
+
+  h1 {
+    letter-spacing: -0.28px;
+  }
+
+  code, pre {
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    font-size: 14px;
+  }
+}
+
+/* Apple Active Scale Micro-interaction */
+button, 
+a.btn,
+.interactive-chip {
+  transition: transform 0.12s cubic-bezier(0.25, 1, 0.5, 1), background-color 0.12s ease;
+}
+
+button:active, 
+a.btn:active,
+.interactive-chip:active {
+  transform: scale(0.95);
+}
+
+/* Custom Scrollbar for modern look */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #f5f5f7;
+}
+::-webkit-scrollbar-thumb {
+  background: #d2d2d7;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #7a7a7a;
+}
+
+/* Apple Input Styles */
+@layer base {
+  input, select, textarea {
+    background-color: #ffffff;
+    border: 1px solid #e0e0e0;
+    color: #1d1d1f;
+    border-radius: 11px; /* rounded.md */
+    padding: 10px 16px;
+    font-size: 15px;
+    outline: none;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    font-family: "SF Pro Text", sans-serif;
+  }
+
+  input:focus, select:focus, textarea:focus {
+    border-color: #0066cc;
+    box-shadow: 0 0 0 2px rgba(0, 102, 204, 0.15);
+  }
+}
+
+/* Apple Sub-Nav Frosted Glass Style */
+.frosted-glass {
+  background-color: rgba(245, 245, 247, 0.8);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+}
+
+.frosted-glass-dark {
+  background-color: rgba(39, 39, 41, 0.8);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+}
+
+/* The exactly ONE signature shadow in the system for product renders */
+.apple-product-shadow {
+  box-shadow: rgba(0, 0, 0, 0.12) 3px 5px 30px 0px;
+}
+
+/* PWA App Shell Wrapper for mobile sizing preview on desktop */
+.pwa-container {
+  max-width: 480px;
+  margin: 0 auto;
+  min-height: 100vh;
+  background-color: #ffffff;
+  border-left: 1px solid #e0e0e0;
+  border-right: 1px solid #e0e0e0;
+  display: flex;
+  flex-direction: column;
+  box-shadow: none; /* No shadow on container shell per design */
+}

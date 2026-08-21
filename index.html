@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <title>HALO • Healthcare</title>
+    
+    <!-- PWA Manifest & Native iOS / Android App Config -->
+    <script>
+      (function() {
+        var path = window.location.pathname;
+        var manifestHref = '/manifest.json';
+        var appTitle = 'HALO';
+        if (path.startsWith('/doctor')) {
+          manifestHref = '/manifest-doctor.json';
+          appTitle = 'HALO Doctor';
+        } else if (path.startsWith('/patient')) {
+          manifestHref = '/manifest-patient.json';
+          appTitle = 'HALO Patient';
+        }
+        var link = document.createElement('link');
+        link.rel = 'manifest';
+        link.href = manifestHref;
+        document.head.appendChild(link);
+
+        var meta = document.createElement('meta');
+        meta.name = 'apple-mobile-web-app-title';
+        meta.content = appTitle;
+        document.head.appendChild(meta);
+      })();
+    </script>
+    <meta name="theme-color" content="#0a0a0c" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    
+    <!-- Apple Touch Icons (Must be PNG for iOS Home Screen) -->
+    <link rel="apple-touch-icon" href="/icon-192.png" />
+    <link rel="apple-touch-icon" sizes="192x192" href="/icon-192.png" />
+    <link rel="apple-touch-icon" sizes="512x512" href="/icon-512.png" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>
