@@ -3,6 +3,7 @@ import cors from 'cors';
 import compression from 'compression';
 import path from 'path';
 import os from 'os';
+import mongoose from 'mongoose';
 import { fileURLToPath } from 'url';
 import { authenticate } from './middleware/authenticate.js';
 import authRoutes from './routes/authRoutes.js';
@@ -46,9 +47,17 @@ app.get('/api/server-info', (req, res) => {
 // All other API routes require a valid session token
 app.use('/api', authenticate, apiRouter);
 
-// Health check route
+// Health check route — includes DB connection state for deployment diagnostics
 app.get('/health', (req, res) => {
-  res.json({ status: 'ok', time: new Date() });
+  const states = ['disconnected', 'connected', 'connecting', 'disconnecting'];
+  res.json({
+    status: 'ok',
+    time: new Date(),
+    db: {
+      state: states[mongoose.connection.readyState] || mongoose.connection.readyState,
+      host: mongoose.connection.host || null,
+    },
+  });
 });
 
 // Serve compiled static frontend with correct caching headers:
