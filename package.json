@@ -9,7 +9,6 @@
   "scripts": {
     "dev": "concurrently \"vite\" \"node server/src/index.js\"",
     "host": "concurrently \"vite --host\" \"node server/src/index.js\"",
-    "downloader": "node scripts/downloader.js",
     "server": "node server/src/index.js",
     "build": "vite build",
     "lint": "oxlint",

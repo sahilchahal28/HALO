@@ -5,7 +5,6 @@ import { enqueueMutation } from './offlineQueue';
  *
  * Strategy: ALWAYS use same-origin `/api`.
  * - Dev (vite): proxied to the backend by vite.config.js
- * - Dev tunnel (downloader.js): proxied to :5001
  * - Production: Express serves dist/ and /api from one origin
  *
  * Same-origin is required for the httpOnly refresh cookie to work, so there
