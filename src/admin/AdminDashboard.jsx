@@ -436,12 +436,22 @@ export default function AdminDashboard() {
   };
 
   const handleUpdateBloodStock = async (bloodGroup, actionType) => {
+    // Optimistic instant local state update (0ms UI latency)
+    setBloodBank(prev => prev.map(b => {
+      if (b.bloodGroup === bloodGroup) {
+        const delta = actionType === 'INCREMENT' ? 1 : -1;
+        return { ...b, unitsAvailable: Math.max(0, b.unitsAvailable + delta) };
+      }
+      return b;
+    }));
+    addToast(`Blood Group ${bloodGroup} units updated!`, 'success');
+
     try {
       await api.put('/bloodbank/stock', { bloodGroup, actionType });
-      addToast(`Blood Group ${bloodGroup} units updated!`, 'success');
       refreshData();
     } catch (err) {
       addToast(err.message, 'error');
+      refreshData();
     }
   };
 
@@ -488,18 +498,34 @@ export default function AdminDashboard() {
   const handleInventoryMovement = async (e) => {
     e.preventDefault();
     if (!invMove.itemId) return;
+
+    const qty = Number(invMove.qty) || 0;
+    const isReduction = invMove.type === 'Dispensed' || invMove.type === 'Waste' || invMove.type === 'DISPENSED' || invMove.type === 'WASTE';
+    
+    // Optimistic instant UI update
+    setInventory(prev => prev.map(item => {
+      if (item.itemId === invMove.itemId) {
+        const newQty = isReduction ? Math.max(0, item.quantity - qty) : item.quantity + qty;
+        return { ...item, quantity: newQty };
+      }
+      return item;
+    }));
+    addToast('Inventory movement logged & updated.', 'success');
+    
+    const currentMove = { ...invMove };
+    setInvMove({ itemId: '', type: 'Received', qty: 1, notes: '' });
+
     try {
       await api.post('/inventory/movement', {
-        itemId: invMove.itemId,
-        type: invMove.type,
-        quantity: invMove.qty,
-        notes: invMove.notes
+        itemId: currentMove.itemId,
+        type: currentMove.type,
+        quantity: currentMove.qty,
+        notes: currentMove.notes
       });
-      addToast('Inventory movement logged & updated.', 'success');
-      setInvMove({ itemId: '', type: 'Received', qty: 1, notes: '' });
       refreshData();
     } catch (err) {
       addToast(err.message, 'error');
+      refreshData();
     }
   };
 
