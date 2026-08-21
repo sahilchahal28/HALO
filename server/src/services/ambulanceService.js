@@ -17,10 +17,10 @@ export async function createAmbulanceRequest(requestData, patientId) {
   const count = await AmbulanceRequest.countDocuments();
   const requestId = `AMB-${10000 + count}`;
 
-  // Find a doctor to alert
-  const doctor = await Doctor.findOne({ status: 'ACTIVE' });
-  const assignedDoctorId = doctor ? doctor.doctorId : 'doctor1';
-  const assignedDoctorName = doctor ? doctor.name : 'Dr. Ananya Iyer';
+  // No doctor is auto-assigned. Every ACTIVE doctor is alerted so the one
+  // who responds claims the patient by scanning their QR code.
+  const assignedDoctorId = 'UNASSIGNED';
+  const assignedDoctorName = 'Awaiting QR Scan';
 
   const request = new AmbulanceRequest({
     requestId,
@@ -52,19 +52,23 @@ export async function createAmbulanceRequest(requestData, patientId) {
     await activeEpisode.save();
   }
 
-  // Trigger Doctor Notification
-  const notifId = `NOT-${Math.floor(100000 + Math.random() * 900000)}`;
-  await Notification.create({
-    notificationId: notifId,
-    recipientType: 'DOCTOR',
-    recipientId: assignedDoctorId,
-    type: 'AMBULANCE',
-    title: 'Emergency: Ambulance Dispatch Requested',
-    message: `${patient.fullName} has requested ambulance dispatch. Location: ${requestData.location}. Symptoms: ${requestData.condition}.`,
-    relatedEntity: 'AmbulanceRequest',
-    relatedEntityId: requestId,
-    patientId
-  });
+  // Alert EVERY active doctor so any of them can respond and claim the
+  // patient by scanning their QR code.
+  const activeDoctors = await Doctor.find({ status: 'ACTIVE' });
+  for (const doc of activeDoctors) {
+    const notifId = `NOT-${Math.floor(100000 + Math.random() * 900000)}`;
+    await Notification.create({
+      notificationId: notifId,
+      recipientType: 'DOCTOR',
+      recipientId: doc.doctorId,
+      type: 'AMBULANCE',
+      title: 'Emergency: Ambulance Dispatch Requested',
+      message: `${patient.fullName} has requested ambulance dispatch. Location: ${requestData.location}. Symptoms: ${requestData.condition}.`,
+      relatedEntity: 'AmbulanceRequest',
+      relatedEntityId: requestId,
+      patientId
+    });
+  }
 
   await logAction({
     actor: patientId,

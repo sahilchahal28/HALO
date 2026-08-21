@@ -144,30 +144,41 @@ export function AppProvider({ children }) {
         return;
       }
 
+      // Always re-validate the session against the server at boot.
+      // The server's /auth/refresh verifies the account still exists, which
+      // kills stale identities (e.g., IDs from before a migration) that would
+      // otherwise cause "doctor not found" errors on QR-scan assignment.
       try {
-        const savedToken = localStorage.getItem('halo_token');
-        const savedUser = localStorage.getItem('halo_user');
-        if (savedToken && savedUser) {
-          setToken(savedToken);
-          setUser(JSON.parse(savedUser));
-        } else {
-          const session = await api.refreshSession();
-          if (!cancelled && session && session.token) {
-            setToken(session.token);
-            setUser(session.user);
-            try {
-              localStorage.setItem('halo_token', session.token);
-              localStorage.setItem('halo_user', JSON.stringify(session.user));
-            } catch (_) {}
-          } else if (!cancelled) {
+        const session = await api.refreshSession();
+        if (!cancelled && session && session.token) {
+          setToken(session.token);
+          setUser(session.user);
+          try {
+            localStorage.setItem('halo_token', session.token);
+            localStorage.setItem('halo_user', JSON.stringify(session.user));
+          } catch (_) {}
+        } else if (!cancelled) {
+          // Server explicitly rejected the session (invalid/expired/ghost)
+          try {
+            localStorage.removeItem('halo_token');
+            localStorage.removeItem('halo_user');
+          } catch (_) {}
+          setToken(null);
+          setUser(null);
+        }
+      } catch (err) {
+        // NETWORK failure (offline) — keep the cached session so the
+        // installed PWA still opens with its last-known data.
+        if (!cancelled) {
+          try {
+            const savedToken = localStorage.getItem('halo_token');
+            const savedUser = localStorage.getItem('halo_user');
+            setToken(savedToken || null);
+            setUser(savedUser ? JSON.parse(savedUser) : null);
+          } catch (_) {
             setToken(null);
             setUser(null);
           }
-        }
-      } catch (_) {
-        if (!cancelled) {
-          setToken(null);
-          setUser(null);
         }
       }
       if (!cancelled) setLoading(false);

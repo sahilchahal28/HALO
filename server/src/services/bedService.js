@@ -1,6 +1,5 @@
 import Bed from '../models/Bed.js';
 import Patient from '../models/Patient.js';
-import Doctor from '../models/Doctor.js';
 import TreatmentEpisode from '../models/TreatmentEpisode.js';
 import { generateEpisodeId } from '../utils/episodeIdGenerator.js';
 import { logAction } from './auditService.js';
@@ -17,37 +16,23 @@ export async function assignBed(bedId, patientId, actor) {
   const patient = await Patient.findOne({ patientId });
   if (!patient) throw new Error('Patient not found');
 
-  // Verify patient has active clinical episode or auto-create one
+  // Verify patient has active clinical episode or auto-create one.
+  // NOTE: a doctor is NEVER assigned here. Assignment happens exclusively
+  // when a doctor scans the patient's QR code (or claims via attention toggle).
   let activeEpisode = await TreatmentEpisode.findOne({ patientId, status: 'ACTIVE' });
   if (!activeEpisode) {
     patient.status = 'ADMITTED';
     patient.department = bed.department;
-    if (!patient.assignedDoctor) {
-      const defaultDoc = await Doctor.findOne({});
-      if (defaultDoc) {
-        patient.assignedDoctor = defaultDoc._id;
-      }
-    }
     await patient.save();
 
     const episodeId = await generateEpisodeId();
-
-    let doctorId = 'DOC-UNKNOWN';
-    let doctorName = 'Default Consultant';
-    if (patient.assignedDoctor) {
-      const doc = await Doctor.findById(patient.assignedDoctor);
-      if (doc) {
-        doctorId = doc.doctorId;
-        doctorName = doc.name;
-      }
-    }
 
     activeEpisode = new TreatmentEpisode({
       episodeId,
       patientId,
       patientName: patient.fullName,
-      doctorId,
-      doctorName,
+      doctorId: 'UNASSIGNED',
+      doctorName: 'Awaiting QR Scan',
       status: 'ACTIVE',
       currentStage: 'ADMISSION',
       reason: 'Inpatient Ward Admission',
