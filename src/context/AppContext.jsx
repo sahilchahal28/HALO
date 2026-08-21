@@ -80,18 +80,35 @@ export function AppProvider({ children }) {
     } catch (_) { return []; }
   });
   
-  // Toast Notification System (Strictly capped at maximum 3 visible toasts)
+  // Toast Notification System (Strictly capped at maximum 3 visible toasts everywhere)
   const [toasts, setToasts] = useState([]);
+  const lastToastTimeRef = useRef({});
+
+  const removeToast = (id) => {
+    setToasts(prev => prev.filter(t => t.id !== id));
+  };
 
   const addToast = (message, type = 'info') => {
-    const id = Date.now() + Math.random();
+    if (!message) return;
+    const now = Date.now();
+
+    // Deduplicate identical message triggers within 1.5 seconds
+    if (lastToastTimeRef.current[message] && (now - lastToastTimeRef.current[message] < 1500)) {
+      return;
+    }
+    lastToastTimeRef.current[message] = now;
+
+    const id = now + Math.random();
     setToasts(prev => {
-      const updated = [...prev, { id, message, type }];
-      return updated.slice(-3); // Strictly keep maximum 3 toasts on screen
+      // Remove any previous toast with exact same message
+      const filtered = prev.filter(t => t.message !== message);
+      const updated = [...filtered, { id, message, type }];
+      return updated.slice(-3); // Strictly enforce maximum 3 toasts
     });
+
     setTimeout(() => {
-      setToasts(prev => prev.filter(t => t.id !== id));
-    }, 4000);
+      removeToast(id);
+    }, 2500); // 2.5s auto-dismiss
   };
 
   // Translation helper
@@ -479,21 +496,34 @@ export function AppProvider({ children }) {
       )}
 
       {/* Toast Alert Render Container (Strict max 3 visible toasts) */}
-      <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-3 max-w-sm pointer-events-none">
+      <div className="fixed bottom-6 right-6 z-[9999] flex flex-col gap-2.5 max-w-sm pointer-events-none">
         {toasts.slice(-3).map(toast => (
           <div
             key={toast.id}
-            className={`p-4 rounded-xl shadow-xl border text-xs font-semibold tracking-tight pointer-events-auto flex items-center gap-3 transition-all duration-300 transform translate-y-0 opacity-100 ${
+            className={`p-3.5 px-4 rounded-xl shadow-lg border text-xs font-semibold tracking-tight pointer-events-auto flex items-center justify-between gap-3 transition-all duration-200 ${
               toast.type === 'success' 
-                ? 'bg-[#edf7f2] border-[#22c55e] text-[#166534]' 
+                ? 'bg-[#edf7f2] border-[#22c55e]/40 text-[#166534]' 
                 : toast.type === 'error'
-                ? 'bg-[#fef2f2] border-[#ef4444] text-[#991b1b]'
+                ? 'bg-[#fef2f2] border-[#ef4444]/40 text-[#991b1b]'
+                : toast.type === 'warning'
+                ? 'bg-[#fffbe0] border-[#eab308]/40 text-[#854d0e]'
                 : 'bg-white border-[#e5e5e5] text-[#1c1c1c]'
             }`}
           >
-            {toast.type === 'error' && <span className="w-2.5 h-2.5 rounded-full bg-[#ef4444] shrink-0" />}
-            {toast.type === 'success' && <span className="w-2.5 h-2.5 rounded-full bg-[#22c55e] shrink-0" />}
-            <span>{toast.message}</span>
+            <div className="flex items-center gap-2.5 min-w-0">
+              {toast.type === 'error' && <span className="w-2 h-2 rounded-full bg-[#ef4444] shrink-0" />}
+              {toast.type === 'success' && <span className="w-2 h-2 rounded-full bg-[#22c55e] shrink-0" />}
+              {toast.type === 'warning' && <span className="w-2 h-2 rounded-full bg-[#eab308] shrink-0" />}
+              {toast.type === 'info' && <span className="w-2 h-2 rounded-full bg-[#0066cc] shrink-0" />}
+              <span className="truncate">{toast.message}</span>
+            </div>
+            <button
+              onClick={() => removeToast(toast.id)}
+              className="text-xs opacity-50 hover:opacity-100 shrink-0 cursor-pointer p-0.5 ml-1 border-none bg-transparent"
+              title="Dismiss"
+            >
+              ✕
+            </button>
           </div>
         ))}
       </div>
