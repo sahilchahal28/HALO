@@ -80,12 +80,15 @@ export function AppProvider({ children }) {
     } catch (_) { return []; }
   });
   
-  // Toast Notification System
+  // Toast Notification System (Strictly capped at maximum 3 visible toasts)
   const [toasts, setToasts] = useState([]);
 
   const addToast = (message, type = 'info') => {
-    const id = Date.now();
-    setToasts(prev => [...prev, { id, message, type }]);
+    const id = Date.now() + Math.random();
+    setToasts(prev => {
+      const updated = [...prev, { id, message, type }];
+      return updated.slice(-3); // Strictly keep maximum 3 toasts on screen
+    });
     setTimeout(() => {
       setToasts(prev => prev.filter(t => t.id !== id));
     }, 4000);
@@ -475,9 +478,9 @@ export function AppProvider({ children }) {
         </div>
       )}
 
-      {/* Toast Alert Render Container */}
+      {/* Toast Alert Render Container (Strict max 3 visible toasts) */}
       <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-3 max-w-sm pointer-events-none">
-        {toasts.map(toast => (
+        {toasts.slice(-3).map(toast => (
           <div
             key={toast.id}
             className={`p-4 rounded-xl shadow-xl border text-xs font-semibold tracking-tight pointer-events-auto flex items-center gap-3 transition-all duration-300 transform translate-y-0 opacity-100 ${
