@@ -11,8 +11,21 @@ function ProtectedRoute({ children }) {
   return children;
 }
 
-// Universal Portal Selection Root
+// Universal Portal Selection Root.
+// When running as an INSTALLED PWA (standalone), a device that wakes up on "/"
+// is sent straight to its own portal — iOS ignores the manifest start_url and
+// reopens the URL captured at install time, which can be "/" instead of
+// /doctor or /patient. Browser tabs always see the normal role portal.
 function PortalRoute() {
+  const isStandalone =
+    window.matchMedia('(display-mode: standalone)').matches ||
+    window.navigator.standalone === true;
+
+  if (isStandalone) {
+    const lastRole = localStorage.getItem('halo_last_role');
+    if (lastRole === 'DOCTOR') return <Navigate to="/doctor" replace />;
+    if (lastRole === 'PATIENT') return <Navigate to="/patient" replace />;
+  }
   return <RolePortal />;
 }
 

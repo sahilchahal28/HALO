@@ -73,7 +73,7 @@ export default function RolePortal() {
 
             {/* DOCTOR CARD */}
             <button
-              onClick={() => navigate('/doctor')}
+              onClick={() => { try { localStorage.setItem('halo_last_role', 'DOCTOR'); } catch (_) {} navigate('/doctor'); }}
               className="bg-canvas border border-hairline hover:border-hairline-strong p-8 rounded-lg text-left transition-all duration-200 group flex flex-col justify-between h-72 cursor-pointer"
               style={{ borderRadius: '18px' }} // rounded.lg
             >
@@ -92,7 +92,7 @@ export default function RolePortal() {
 
             {/* PATIENT CARD */}
             <button
-              onClick={() => navigate('/patient')}
+              onClick={() => { try { localStorage.setItem('halo_last_role', 'PATIENT'); } catch (_) {} navigate('/patient'); }}
               className="bg-canvas border border-hairline hover:border-hairline-strong p-8 rounded-lg text-left transition-all duration-200 group flex flex-col justify-between h-72 cursor-pointer"
               style={{ borderRadius: '18px' }} // rounded.lg
             >

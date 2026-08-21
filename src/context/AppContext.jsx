@@ -125,6 +125,12 @@ export function AppProvider({ children }) {
 
     async function bootSession() {
       const path = window.location.pathname;
+
+      // Remember which PWA this device uses so an installed app that wakes up
+      // on "/" (iOS ignores manifest start_url) can be sent to its own portal.
+      if (path.startsWith('/doctor')) localStorage.setItem('halo_last_role', 'DOCTOR');
+      else if (path.startsWith('/patient')) localStorage.setItem('halo_last_role', 'PATIENT');
+
       if (path.startsWith('/admin')) {
         const adminUser = { id: 'admin', role: 'ADMIN', name: 'Sarah Jenkins (Admin)' };
         const adminToken = 'mock-admin-token';
@@ -217,6 +223,11 @@ export function AppProvider({ children }) {
         phone: credentials.phone,
         id: credentials.id
       });
+
+      // Remember this device's PWA role (used by the standalone boot redirect)
+      if (role === 'DOCTOR' || role === 'PATIENT') {
+        try { localStorage.setItem('halo_last_role', role); } catch (_) {}
+      }
 
       setToken(res.token);
       setUser(res.user);
