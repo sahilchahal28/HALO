@@ -4,7 +4,7 @@ import compression from 'compression';
 import path from 'path';
 import os from 'os';
 import { fileURLToPath } from 'url';
-import { demoUser } from './middleware/demoUser.js';
+import { authenticate } from './middleware/authenticate.js';
 import authRoutes from './routes/authRoutes.js';
 import apiRouter from './routes/index.js';
 import { errorHandler } from './middleware/errorHandler.js';
@@ -24,11 +24,8 @@ app.use(compression());
 app.use(cors());
 app.use(express.json());
 
-// Mount auth routes
+// Mount auth routes (public — login/refresh/logout manage their own access)
 app.use('/api/auth', authRoutes);
-
-// Inject authentication context bypass middleware
-app.use(demoUser);
 
 // Server info endpoint — returns LAN IP so tunnel-installed PWAs can find the backend
 app.get('/api/server-info', (req, res) => {
@@ -46,21 +43,27 @@ app.get('/api/server-info', (req, res) => {
   res.json({ lanIp: lanIp || req.hostname });
 });
 
-// Mount API paths
-app.use('/api', apiRouter);
+// All other API routes require a valid session token
+app.use('/api', authenticate, apiRouter);
 
 // Health check route
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', time: new Date() });
 });
 
-// Serve compiled static frontend with caching headers
+// Serve compiled static frontend with correct caching headers:
+// - /sw.js            -> no-store (service worker must always revalidate)
+// - *.html            -> no-cache  (entry point must pick up new hashed assets)
+// - /assets/*         -> 1y immutable (content-hashed filenames)
+// - everything else   -> default (etag revalidation)
 app.use(express.static(distPath, {
-  maxAge: '1y',
-  immutable: true,
   setHeaders: (res, filePath) => {
-    if (filePath.endsWith('.html')) {
+    if (filePath.endsWith('sw.js')) {
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+    } else if (filePath.endsWith('.html')) {
       res.setHeader('Cache-Control', 'no-cache, must-revalidate');
+    } else if (filePath.includes(`${path.sep}assets${path.sep}`)) {
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
     }
   }
 }));
@@ -70,6 +73,7 @@ app.use((req, res, next) => {
   if (req.path.startsWith('/api') || req.path === '/health') {
     return next();
   }
+  res.setHeader('Cache-Control', 'no-cache, must-revalidate');
   res.sendFile(path.join(distPath, 'index.html'));
 });
 

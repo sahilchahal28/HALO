@@ -6,24 +6,20 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <title>HALO • Healthcare</title>
     
-    <!-- PWA Manifest & Native iOS / Android App Config -->
+    <!-- PWA Manifest (static link for reliable install detection; swapped per-role synchronously below) -->
+    <link rel="manifest" href="/manifest.json" />
     <script>
       (function() {
         var path = window.location.pathname;
-        var manifestHref = '/manifest.json';
+        var link = document.querySelector('link[rel="manifest"]');
         var appTitle = 'HALO';
         if (path.startsWith('/doctor')) {
-          manifestHref = '/manifest-doctor.json';
+          link.href = '/manifest-doctor.json';
           appTitle = 'HALO Doctor';
         } else if (path.startsWith('/patient')) {
-          manifestHref = '/manifest-patient.json';
+          link.href = '/manifest-patient.json';
           appTitle = 'HALO Patient';
         }
-        var link = document.createElement('link');
-        link.rel = 'manifest';
-        link.href = manifestHref;
-        document.head.appendChild(link);
-
         var meta = document.createElement('meta');
         meta.name = 'apple-mobile-web-app-title';
         meta.content = appTitle;

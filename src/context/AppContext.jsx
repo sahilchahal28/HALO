@@ -1,5 +1,7 @@
 import React, { createContext, useState, useEffect, useContext, useRef } from 'react';
+import { WifiOff } from 'lucide-react';
 import { api } from '../utils/api';
+import { flushQueue } from '../utils/offlineQueue';
 import { translations } from '../utils/translations';
 
 const AppContext = createContext();
@@ -14,6 +16,7 @@ export function AppProvider({ children }) {
   const [loading, setLoading] = useState(true);
   const [language, setLanguage] = useState('en'); // 'en' or 'hi'
   const wasOfflineRef = useRef(false);
+  const [isOffline, setIsOffline] = useState(typeof navigator !== 'undefined' ? !navigator.onLine : false);
   
   // Real-time synced state with localStorage fallbacks for instant reloading
   const [patients, setPatients] = useState(() => {
@@ -92,21 +95,13 @@ export function AppProvider({ children }) {
     return translations[language][key] || key;
   };
 
-  // Load user based on active pathname or saved credentials
+  // Load user based on active pathname or saved credentials.
+  // If no local session exists, try a silent refresh via the httpOnly cookie
+  // so installed PWAs stay signed in across restarts and long gaps in usage.
   useEffect(() => {
-    const path = window.location.pathname;
-    if (path.startsWith('/admin')) {
-      // Admin bypass
-      const adminUser = { id: 'admin', role: 'ADMIN', name: 'Sarah Jenkins (Admin)' };
-      const adminToken = 'mock-admin-token';
-      setUser(adminUser);
-      setToken(adminToken);
-      try {
-        localStorage.setItem('halo_token', adminToken);
-        localStorage.setItem('halo_user', JSON.stringify(adminUser));
-      } catch (_) {}
-    } else {
-      // Load saved token/user for Doctor and Patient PWA on boot
+    let cancelled = false;
+
+    async function bootSession() {
       try {
         const savedToken = localStorage.getItem('halo_token');
         const savedUser = localStorage.getItem('halo_user');
@@ -114,52 +109,75 @@ export function AppProvider({ children }) {
           setToken(savedToken);
           setUser(JSON.parse(savedUser));
         } else {
+          const session = await api.refreshSession();
+          if (!cancelled && session && session.token) {
+            setToken(session.token);
+            setUser(session.user);
+            try {
+              localStorage.setItem('halo_token', session.token);
+              localStorage.setItem('halo_user', JSON.stringify(session.user));
+            } catch (_) {}
+          } else if (!cancelled) {
+            setToken(null);
+            setUser(null);
+          }
+        }
+      } catch (_) {
+        if (!cancelled) {
           setToken(null);
           setUser(null);
         }
-      } catch (_) {
-        setToken(null);
-        setUser(null);
       }
+      if (!cancelled) setLoading(false);
     }
-    setLoading(false);
-  }, [window.location.pathname]);
+
+    bootSession();
+    return () => { cancelled = true; };
+  }, []);
+
+  // Track online/offline state and replay queued mutations on reconnect
+  useEffect(() => {
+    const goOnline = async () => {
+      setIsOffline(false);
+      try {
+        const flushed = await flushQueue((endpoint, options) =>
+          api.post(endpoint, options.body)
+        );
+        if (flushed > 0) addToast(`${flushed} offline change(s) synced successfully`, 'success');
+      } catch (_) {}
+    };
+    const goOffline = () => setIsOffline(true);
+
+    window.addEventListener('online', goOnline);
+    window.addEventListener('offline', goOffline);
+    if (!navigator.onLine) goOffline();
+    return () => {
+      window.removeEventListener('online', goOnline);
+      window.removeEventListener('offline', goOffline);
+    };
+  }, []);
 
   const login = async (role, credentials) => {
     setLoading(true);
     try {
-      if (role === 'ADMIN') {
-        const adminUser = { id: 'admin', role: 'ADMIN', name: 'Sarah Jenkins (Admin)' };
-        const adminToken = 'mock-admin-token';
-        setToken(adminToken);
-        setUser(adminUser);
-        try {
-          localStorage.setItem('halo_token', adminToken);
-          localStorage.setItem('halo_user', JSON.stringify(adminUser));
-        } catch (_) {}
-        addToast('Signed in as Admin', 'success');
-        setLoading(false);
-        return adminUser;
-      } else {
-        // Authenticate with backend API
-        const res = await api.post('/auth/login', {
-          role,
-          phone: credentials.phone,
-          id: credentials.id
-        });
-        
-        setToken(res.token);
-        setUser(res.user);
-        
-        try {
-          localStorage.setItem('halo_token', res.token);
-          localStorage.setItem('halo_user', JSON.stringify(res.user));
-        } catch (_) {}
-        
-        addToast(`Signed in successfully`, 'success');
-        setLoading(false);
-        return res.user;
-      }
+      // All roles (including ADMIN) authenticate through the backend API
+      const res = await api.post('/auth/login', {
+        role,
+        phone: credentials.phone,
+        id: credentials.id
+      });
+
+      setToken(res.token);
+      setUser(res.user);
+
+      try {
+        localStorage.setItem('halo_token', res.token);
+        localStorage.setItem('halo_user', JSON.stringify(res.user));
+      } catch (_) {}
+
+      addToast(`Signed in successfully`, 'success');
+      setLoading(false);
+      return res.user;
     } catch (err) {
       setLoading(false);
       addToast(err.response?.data?.message || err.message || 'Login failed', 'error');
@@ -167,17 +185,20 @@ export function AppProvider({ children }) {
     }
   };
 
-  const logout = () => {
+  const logout = async () => {
     setToken(null);
     setUser(null);
     setPatientEpisode(null);
     setPatientProfile(null);
     setDoctorNotifications([]);
-    
+
     try {
       localStorage.removeItem('halo_token');
       localStorage.removeItem('halo_user');
     } catch (_) {}
+
+    // Clear the httpOnly refresh cookie server-side (best effort)
+    try { await api.post('/auth/logout'); } catch (_) {}
   };
 
   const exitApp = () => {
@@ -380,7 +401,15 @@ export function AppProvider({ children }) {
       }
     }}>
       {children}
-      
+
+      {/* Offline Banner — shown when the device has no connectivity */}
+      {isOffline && (
+        <div className="fixed top-0 left-0 right-0 z-[100] flex items-center justify-center gap-2 bg-[#0a0a0c] text-white/90 text-[11px] font-semibold uppercase tracking-wider py-1.5 px-4 border-b border-white/10">
+          <WifiOff size={12} className="shrink-0" />
+          <span>Offline — showing cached data</span>
+        </div>
+      )}
+
       {/* Toast Alert Render Container */}
       <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-3 max-w-sm pointer-events-none">
         {toasts.map(toast => (

@@ -1,92 +1,99 @@
+import { enqueueMutation } from './offlineQueue';
+
 /**
  * API utility for HALO.
  *
- * Strategy: Always use the saved server IP if available.
- * The server IP is saved to localStorage on first contact (via downloader or main app).
- * This makes the PWA work regardless of whether it was installed via tunnel or LAN.
+ * Strategy: ALWAYS use same-origin `/api`.
+ * - Dev (vite): proxied to the backend by vite.config.js
+ * - Dev tunnel (downloader.js): proxied to :5001
+ * - Production: Express serves dist/ and /api from one origin
+ *
+ * Same-origin is required for the httpOnly refresh cookie to work, so there
+ * are deliberately NO cross-origin / raw-IP fallback paths anymore.
  */
 
-const STORAGE_KEY = 'halo_server_ip';
-const API_PORT = 5001;
+const STORAGE_KEY = 'halo_token';
 
-function getBaseUrl() {
-  if (typeof window === 'undefined') return '/api';
+let refreshingPromise = null;
 
-  const { hostname, protocol } = window.location;
-
-  // On localhost → use Vite dev proxy
-  if (hostname === 'localhost' || hostname === '127.0.0.1') {
-    return '/api';
+export class ApiError extends Error {
+  constructor(message, status) {
+    super(message);
+    this.status = status;
+    this.isNetworkError = status === undefined;
   }
-
-  // If we are browsing over HTTPS (secure tunnel or production), we must use
-  // same-origin /api to avoid Mixed Content blockage.
-  if (protocol === 'https:') {
-    return '/api';
-  }
-
-  // If the current hostname is an IP address, use it directly (prevents stale storage IP clashes)
-  if (/^\d+\.\d+\.\d+\.\d+$/.test(hostname)) {
-    return `http://${hostname}:${API_PORT}/api`;
-  }
-
-  // Check for a saved server IP (set during installation or on first LAN access)
-  const savedIp = localStorage.getItem(STORAGE_KEY);
-  if (savedIp) {
-    return `http://${savedIp}:${API_PORT}/api`;
-  }
-
-  // No saved IP — try same-host on API port (works when browsing via LAN IP directly)
-  return `http://${hostname}:${API_PORT}/api`;
 }
 
-async function request(endpoint, options = {}) {
-  const token = localStorage.getItem('halo_token');
+function getToken() {
+  try {
+    return localStorage.getItem(STORAGE_KEY);
+  } catch (_) {
+    return null;
+  }
+}
+
+export function setToken(token) {
+  try {
+    if (token) localStorage.setItem(STORAGE_KEY, token);
+    else localStorage.removeItem(STORAGE_KEY);
+  } catch (_) {}
+}
+
+async function refreshSession() {
+  // Coalesce concurrent refresh attempts into one request
+  if (!refreshingPromise) {
+    refreshingPromise = (async () => {
+      const res = await fetch('/api/auth/refresh', { method: 'POST', credentials: 'same-origin' });
+      if (!res.ok) return null;
+      const data = await res.json();
+      if (data.token) setToken(data.token);
+      return data;
+    })().finally(() => {
+      refreshingPromise = null;
+    });
+  }
+  return refreshingPromise;
+}
+
+async function rawRequest(endpoint, options = {}, isRetry = false) {
+  const token = getToken();
 
   const headers = {
-    'Content-Type': 'application/json',
+    ...(options.body && { 'Content-Type': 'application/json' }),
     ...(token && { Authorization: `Bearer ${token}` }),
     ...options.headers,
   };
 
-  const config = {
-    ...options,
-    headers,
-  };
-
-  if (config.body && typeof config.body === 'object') {
-    config.body = JSON.stringify(config.body);
+  // Serialize object bodies for fetch
+  let body = options.body;
+  if (body && typeof body === 'object' && !(body instanceof FormData)) {
+    body = JSON.stringify(body);
   }
-
-  const baseUrl = getBaseUrl();
-  const url = `${baseUrl}${endpoint}`;
 
   let response;
   try {
-    response = await fetch(url, config);
-  } catch (networkErr) {
-    // If same-origin /api fails (e.g. downloader proxy is closed), attempt to connect
-    // directly to the local backend server on port 5001 or the saved LAN IP.
-    if (baseUrl === '/api') {
-      const savedIp = localStorage.getItem(STORAGE_KEY);
-      const fallbackHost = savedIp ? `${savedIp}:${API_PORT}` : `127.0.0.1:${API_PORT}`;
-      const fallbackUrl = `http://${fallbackHost}/api${endpoint}`;
-      try {
-        console.log(`[API Fallback] Proxy offline. Retrying directly on: ${fallbackUrl}`);
-        response = await fetch(fallbackUrl, config);
-      } catch (fallbackErr) {
-        throw new Error(
-          'Network error: Unable to reach the HALO server. Make sure the backend server is running (npm run host).'
-        );
-      }
-    } else {
-      throw new Error(
-        'Network error: Unable to reach the HALO server. Make sure you are on the same Wi-Fi and the server is running (npm run host).'
-      );
-    }
+    response = await fetch(`/api${endpoint}`, {
+      ...options,
+      body,
+      headers,
+      credentials: 'same-origin',
+    });
+  } catch (_) {
+    throw new ApiError(
+      'Network error: Unable to reach the HALO server. Make sure the backend server is running.',
+      undefined
+    );
   }
 
   if (response.status === 204) return null;
+
+  if (response.status === 401 && !isRetry && !endpoint.startsWith('/auth/')) {
+    // Access token expired -> silent refresh once, then retry the original request
+    const session = await refreshSession();
+    if (session && session.token) {
+      return rawRequest(endpoint, options, true);
+    }
+  }
 
   if (response.ok) {
     return response.json();
@@ -97,7 +104,24 @@ async function request(endpoint, options = {}) {
     const errData = await response.json();
     errorMessage = errData.message || errorMessage;
   } catch (_) {}
-  throw new Error(errorMessage);
+  throw new ApiError(errorMessage, response.status);
+}
+
+async function request(endpoint, options = {}) {
+  try {
+    return await rawRequest(endpoint, options);
+  } catch (err) {
+    // Queue failed mutations for replay when back online (never queue auth)
+    if (
+      err.isNetworkError &&
+      options.method &&
+      options.method !== 'GET' &&
+      !endpoint.startsWith('/auth/')
+    ) {
+      enqueueMutation({ endpoint, method: options.method, body: options.body });
+    }
+    throw err;
+  }
 }
 
 export const api = {
@@ -105,4 +129,5 @@ export const api = {
   post: (endpoint, body, headers = {}) => request(endpoint, { method: 'POST', body, headers }),
   put: (endpoint, body, headers = {}) => request(endpoint, { method: 'PUT', body, headers }),
   delete: (endpoint, headers = {}) => request(endpoint, { method: 'DELETE', headers }),
+  refreshSession,
 };

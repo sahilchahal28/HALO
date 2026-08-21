@@ -5,145 +5,22 @@ import { fileURLToPath } from 'url';
 import { spawn, execSync } from 'child_process';
 import QRCode from 'qrcode';
 import http from 'http';
-import os from 'os';
 import fs from 'fs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const distPath = path.resolve(__dirname, '../dist');
 
-function injectAssetsIntoServiceWorker() {
-  console.log('🔄 Injecting production assets into Service Worker cache list...');
-  
-  const filesToCache = [];
-  
-  function walkDir(currentPath) {
-    const files = fs.readdirSync(currentPath);
-    for (const file of files) {
-      const fullPath = path.join(currentPath, file);
-      const stat = fs.statSync(fullPath);
-      
-      if (stat.isDirectory()) {
-        walkDir(fullPath);
-      } else {
-        // Get relative path from distPath
-        const relativePath = '/' + path.relative(distPath, fullPath).replace(/\\/g, '/');
-        
-        // Exclude sw.js itself, downloader-qr.png, and map files if any
-        if (
-          relativePath !== '/sw.js' &&
-          relativePath !== '/downloader-qr.png' &&
-          !relativePath.endsWith('.map')
-        ) {
-          filesToCache.push(relativePath);
-        }
-      }
-    }
-  }
-  
-  try {
-    walkDir(distPath);
-    
-    // Manually append PWA routing entry points so they are directly cached and offline-ready
-    if (!filesToCache.includes('/doctor')) {
-      filesToCache.push('/doctor');
-    }
-    if (!filesToCache.includes('/patient')) {
-      filesToCache.push('/patient');
-    }
-    
-    // Make sure root '/' is included
-    if (!filesToCache.includes('/')) {
-      filesToCache.unshift('/');
-    }
-    
-    const swPath = path.join(distPath, 'sw.js');
-    if (fs.existsSync(swPath)) {
-      let swContent = fs.readFileSync(swPath, 'utf8');
-      
-      // Replace STATIC_ASSETS array
-      const assetsJson = JSON.stringify(filesToCache, null, 2);
-      const regex = /const\s+STATIC_ASSETS\s*=\s*\[[\s\S]*?\];/;
-      
-      if (regex.test(swContent)) {
-        swContent = swContent.replace(regex, `const STATIC_ASSETS = ${assetsJson};`);
-        fs.writeFileSync(swPath, swContent, 'utf8');
-        console.log(`✅ Successfully injected ${filesToCache.length} assets into dist/sw.js`);
-      } else {
-        console.warn('⚠️ Could not find STATIC_ASSETS placeholder in sw.js');
-      }
-    } else {
-      console.error('❌ dist/sw.js not found!');
-    }
-  } catch (err) {
-    console.error('❌ Error injecting assets into Service Worker:', err);
-  }
-}
-
 console.log('📦 Compiling optimized production bundle for mobile PWA...');
 try {
   execSync('npm run build', { stdio: 'inherit' });
   console.log('✅ Bundle ready.');
-  injectAssetsIntoServiceWorker();
 } catch (err) {
   console.warn('⚠️ Build warning, proceeding with current dist files.');
 }
 
 const app = express();
 app.use(cors());
-
-// Endpoint to discover the server's LAN IP (used by downloader.html to save for PWAs)
-app.get('/api/server-info', (req, res) => {
-  const interfaces = os.networkInterfaces();
-  let lanIp = null;
-  for (const iface of Object.values(interfaces)) {
-    for (const info of iface) {
-      if (info.family === 'IPv4' && !info.internal) {
-        lanIp = info.address;
-        break;
-      }
-    }
-    if (lanIp) break;
-  }
-  res.json({ lanIp: lanIp || req.hostname });
-});
-
-// Endpoint to return the latest compiled assets for dynamic over-the-air updates
-app.get('/api/latest-assets', (req, res) => {
-  const filesToCache = [];
-  
-  function walkDir(currentPath) {
-    if (!fs.existsSync(currentPath)) return;
-    const files = fs.readdirSync(currentPath);
-    for (const file of files) {
-      const fullPath = path.join(currentPath, file);
-      const stat = fs.statSync(fullPath);
-      
-      if (stat.isDirectory()) {
-        walkDir(fullPath);
-      } else {
-        const relativePath = '/' + path.relative(distPath, fullPath).replace(/\\/g, '/');
-        if (
-          relativePath !== '/sw.js' &&
-          relativePath !== '/downloader-qr.png' &&
-          !relativePath.endsWith('.map')
-        ) {
-          filesToCache.push(relativePath);
-        }
-      }
-    }
-  }
-  
-  try {
-    walkDir(distPath);
-    if (!filesToCache.includes('/')) {
-      filesToCache.unshift('/');
-    }
-    res.json({ assets: filesToCache });
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to read assets: ' + err.message });
-  }
-});
 
 // Proxy API requests to MongoDB backend on port 5001
 app.use('/api', (req, res) => {
@@ -172,67 +49,15 @@ app.get('/downloader.html', (req, res) => {
   res.sendFile(path.join(distPath, 'downloader.html'));
 });
 
-// Route to serve sw.js dynamically with fresh assets pre-cache list and bypass browser caches
+// Route to serve sw.js directly, bypassing browser caches so updates propagate instantly
 app.get('/sw.js', (req, res) => {
   const swPath = path.join(distPath, 'sw.js');
   if (!fs.existsSync(swPath)) {
-    return res.status(404).send('Service worker template not found');
+    return res.status(404).send('Service worker not found');
   }
-
-  const filesToCache = [];
-  
-  function walkDir(currentPath) {
-    if (!fs.existsSync(currentPath)) return;
-    const files = fs.readdirSync(currentPath);
-    for (const file of files) {
-      const fullPath = path.join(currentPath, file);
-      const stat = fs.statSync(fullPath);
-      
-      if (stat.isDirectory()) {
-        walkDir(fullPath);
-      } else {
-        const relativePath = '/' + path.relative(distPath, fullPath).replace(/\\/g, '/');
-        // Exclude sw.js itself, downloader-qr.png, and map files if any
-        if (
-          relativePath !== '/sw.js' &&
-          relativePath !== '/downloader-qr.png' &&
-          !relativePath.endsWith('.map')
-        ) {
-          filesToCache.push(relativePath);
-        }
-      }
-    }
-  }
-
-  try {
-    walkDir(distPath);
-    
-    // Manually append PWA routing entry points so they are directly cached and offline-ready
-    if (!filesToCache.includes('/doctor')) {
-      filesToCache.push('/doctor');
-    }
-    if (!filesToCache.includes('/patient')) {
-      filesToCache.push('/patient');
-    }
-    
-    if (!filesToCache.includes('/')) {
-      filesToCache.unshift('/');
-    }
-
-    let swContent = fs.readFileSync(swPath, 'utf8');
-    const assetsJson = JSON.stringify(filesToCache, null, 2);
-    const regex = /const\s+STATIC_ASSETS\s*=\s*\[[\s\S]*?\];/;
-    
-    if (regex.test(swContent)) {
-      swContent = swContent.replace(regex, `const STATIC_ASSETS = ${assetsJson};`);
-    }
-
-    res.setHeader('Content-Type', 'application/javascript');
-    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
-    res.send(swContent);
-  } catch (err) {
-    res.status(500).send('Error generating service worker: ' + err.message);
-  }
+  res.setHeader('Content-Type', 'application/javascript');
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+  res.sendFile(swPath);
 });
 
 // Serve compiled static assets (Single JS bundle + CSS + Manifests + Icons + Service Worker)
@@ -249,27 +74,9 @@ app.use((req, res, next) => {
     return res.status(404).send('Not Found');
   }
 
-  try {
-    let html = fs.readFileSync(htmlPath, 'utf8');
-
-    // Determine manifest path based on the requested URL route
-    let manifestHref = '/manifest.json';
-    if (req.path.startsWith('/doctor')) {
-      manifestHref = '/manifest-doctor.json';
-    } else if (req.path.startsWith('/patient')) {
-      manifestHref = '/manifest-patient.json';
-    }
-
-    // Statically inject the manifest link tag in the head
-    // This allows Chrome WebAPK creation service to scan and verify the manifest without executing JavaScript.
-    const manifestTag = `<link rel="manifest" href="${manifestHref}">`;
-    html = html.replace('<head>', `<head>\n    ${manifestTag}`);
-
-    res.setHeader('Content-Type', 'text/html');
-    res.send(html);
-  } catch (err) {
-    res.status(500).send('Error reading index.html: ' + err.message);
-  }
+  res.setHeader('Content-Type', 'text/html');
+  res.setHeader('Cache-Control', 'no-cache, must-revalidate');
+  res.sendFile(htmlPath);
 });
 
 // Watch for changes in src/ and public/ to automatically compile and update in real-time

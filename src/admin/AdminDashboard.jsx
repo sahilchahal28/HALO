@@ -4,7 +4,7 @@ import { api } from '../utils/api';
 import { 
   Building2, Users, Bed, Truck, Droplet, Package, 
   UserPlus, Plus, Search, Calendar, ChevronRight, AlertTriangle,
-  Activity, Pill, FlaskConical, Stethoscope, QrCode
+  Activity, Pill, FlaskConical, Stethoscope, QrCode, ShieldCheck
 } from 'lucide-react';
 import QRCode from 'qrcode';
 
@@ -19,10 +19,28 @@ const getCategoryIcon = (category) => {
 
 export default function AdminDashboard() {
   const { 
-    logout, t, beds, patients, ambulanceRequests, 
+    user, login, logout, t, beds, patients, ambulanceRequests, 
     bloodBank, inventory, surgeries, addToast, refreshData, departments,
     ambulanceVehicles, doctors, wasOfflineRef, donorsList
   } = useApp();
+
+  // Admin credentials login form state
+  const [loginForm, setLoginForm] = useState({ phone: '', id: '' });
+  const [loggingIn, setLoggingIn] = useState(false);
+
+  const handleLoginSubmit = async (e) => {
+    e.preventDefault();
+    if (!loginForm.phone || !loginForm.id) return;
+    setLoggingIn(true);
+    try {
+      const phoneFormatted = loginForm.phone.startsWith('+') ? loginForm.phone : `+91${loginForm.phone.trim()}`;
+      await login('ADMIN', { ...loginForm, phone: phoneFormatted });
+    } catch (_) {
+      // Error is already toasted by AppContext
+    } finally {
+      setLoggingIn(false);
+    }
+  };
 
   const [newVehForm, setNewVehForm] = useState({ plateNumber: '', driverName: '', driverPhone: '' });
   const [dispatchVehicles, setDispatchVehicles] = useState({});
@@ -611,6 +629,64 @@ export default function AdminDashboard() {
     (pt.patientId || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
     (pt.phone || '').toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  // Admin login gate — all roles authenticate through the backend
+  if (!user || user.role !== 'ADMIN') {
+    return (
+      <div className="min-h-screen bg-canvas-parchment flex flex-col justify-center items-center p-6 font-sans">
+        <div className="w-full max-w-sm bg-canvas border border-hairline p-8 flex flex-col apple-product-shadow" style={{ borderRadius: '24px' }}>
+          <div className="flex flex-col items-center text-center space-y-2 mb-6">
+            <div className="w-14 h-14 bg-primary/10 rounded-full flex items-center justify-center text-primary">
+              <ShieldCheck size={28} />
+            </div>
+            <h2 className="text-xl font-bold text-ink">Admin Command Centre</h2>
+            <p className="text-xs text-ink-muted-48">Sign in with your admin mobile number & unique Admin ID.</p>
+          </div>
+
+          <form onSubmit={handleLoginSubmit} className="space-y-4">
+            <div className="space-y-1">
+              <label className="text-[10px] text-ink-muted-48 uppercase font-bold tracking-widest block">Admin Mobile</label>
+              <div className="flex items-center bg-canvas-parchment border border-hairline focus-within:border-hairline-strong transition-all overflow-hidden" style={{ borderRadius: '30px' }}>
+                <div className="bg-canvas-card border-r border-hairline px-3.5 py-3 text-xs text-ink-muted-48 font-bold flex items-center shrink-0">
+                  +91
+                </div>
+                <input 
+                  type="tel" 
+                  placeholder="9999999999" 
+                  value={loginForm.phone}
+                  onChange={e => setLoginForm(prev => ({ ...prev, phone: e.target.value }))}
+                  className="w-full px-3 py-3 text-xs bg-transparent focus:outline-none transition-all shadow-none border-none"
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-[10px] text-ink-muted-48 uppercase font-bold tracking-widest block">Unique Admin ID</label>
+              <input 
+                type="text" 
+                placeholder="HALO-ADMIN" 
+                value={loginForm.id}
+                onChange={e => setLoginForm(prev => ({ ...prev, id: e.target.value }))}
+                className="w-full px-4 py-3 text-xs bg-canvas-parchment border border-hairline focus:border-hairline-strong rounded-full focus:outline-none transition-all shadow-none font-mono uppercase"
+                style={{ borderRadius: '30px' }}
+                required
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={loggingIn}
+              className="w-full bg-primary hover:bg-primary-focus text-canvas text-xs font-semibold py-3.5 rounded-full uppercase tracking-wider transition-colors cursor-pointer disabled:opacity-50 mt-2 shadow-none"
+              style={{ borderRadius: '30px' }}
+            >
+              {loggingIn ? 'Authenticating...' : 'Secure Sign In'}
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-canvas-parchment flex flex-col font-sans">
