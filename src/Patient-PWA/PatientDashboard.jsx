@@ -292,8 +292,8 @@ export default function PatientDashboard() {
   return (
     <div className="pwa-container min-h-screen bg-canvas-parchment flex flex-col justify-between relative shadow-none font-sans">
       
-      {/* Top Mobile Header (frosted sub-nav style, 52px) */}
-      <header className="bg-canvas border-b border-hairline h-13 shrink-0 flex justify-between items-center px-4 frosted-glass sticky top-0 z-20">
+      {/* Top Mobile Header (frosted sub-nav style with iOS safe area top inset) */}
+      <header className="bg-canvas border-b border-hairline shrink-0 flex justify-between items-center px-4 frosted-glass sticky top-0 z-20 pwa-header">
         <div className="flex items-center gap-2">
           <span className="w-5 h-5 bg-primary rounded-full flex items-center justify-center text-canvas">
             <Activity size={11} strokeWidth={3} />
@@ -1092,8 +1092,8 @@ export default function PatientDashboard() {
 
       </main>
 
-      {/* Bottom Mobile Tab Bar (frosted glass) */}
-      <footer className="fixed bottom-0 left-0 right-0 h-16 bg-canvas border-t border-hairline flex shrink-0 z-30 frosted-glass shadow-none">
+      {/* Bottom Mobile Tab Bar (frosted glass with iOS safe area bottom inset) */}
+      <footer className="fixed bottom-0 left-0 right-0 bg-canvas border-t border-hairline flex shrink-0 z-30 frosted-glass shadow-none pwa-footer">
         <button 
           onClick={() => setActiveTab('journey')}
           className={`flex-1 flex flex-col items-center justify-center text-xs cursor-pointer ${activeTab === 'journey' ? 'text-primary font-semibold' : 'text-ink-muted-48 hover:text-ink'}`}

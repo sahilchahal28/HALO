@@ -453,8 +453,8 @@ export default function DoctorDashboard() {
   return (
     <div className="pwa-container min-h-screen bg-canvas-parchment flex flex-col justify-between relative shadow-none font-sans">
       
-      {/* Top Mobile Header (frosted sub-nav style, 52px) */}
-      <header className="bg-canvas border-b border-hairline h-13 shrink-0 flex justify-between items-center px-4 frosted-glass sticky top-0 z-20">
+      {/* Top Mobile Header (frosted sub-nav style with iOS safe area top inset) */}
+      <header className="bg-canvas border-b border-hairline shrink-0 flex justify-between items-center px-4 frosted-glass sticky top-0 z-20 pwa-header">
         <div className="flex items-center gap-2">
           <Stethoscope className="text-primary" size={18} />
           <span className="font-sans text-ink text-sm font-semibold tracking-tight uppercase">Dr. Feed • HALO</span>
@@ -1260,8 +1260,8 @@ export default function DoctorDashboard() {
 
       </main>
 
-      {/* Bottom Navigation tab feed (frosted-glass subnav style) */}
-      <footer className="fixed bottom-0 left-0 right-0 h-16 bg-canvas border-t border-hairline flex shrink-0 z-30 frosted-glass shadow-none">
+      {/* Bottom Navigation tab feed (frosted-glass subnav style with iOS safe area bottom inset) */}
+      <footer className="fixed bottom-0 left-0 right-0 bg-canvas border-t border-hairline flex shrink-0 z-30 frosted-glass shadow-none pwa-footer">
         <button 
           onClick={() => setActiveTab('schedule')}
           className={`flex-1 flex flex-col items-center justify-center text-xs cursor-pointer ${activeTab === 'schedule' ? 'text-primary font-semibold' : 'text-ink-muted-48 hover:text-ink'}`}

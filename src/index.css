@@ -153,3 +153,17 @@ a.btn:active,
   box-shadow: none;
 }
 
+/* iOS Safe Area & Notch Support for PWAs */
+.pwa-header {
+  padding-top: max(env(safe-area-inset-top), 14px);
+  padding-bottom: 10px;
+  min-height: calc(3.5rem + env(safe-area-inset-top, 0px));
+  box-sizing: border-box;
+}
+
+.pwa-footer {
+  padding-bottom: max(env(safe-area-inset-bottom), 8px);
+  min-height: calc(4rem + env(safe-area-inset-bottom, 0px));
+  box-sizing: border-box;
+}
+
