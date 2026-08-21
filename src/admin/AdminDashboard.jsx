@@ -19,9 +19,9 @@ const getCategoryIcon = (category) => {
 
 export default function AdminDashboard() {
   const { 
-    logout, t, beds, patients, ambulanceRequests, 
-    bloodBank, inventory, surgeries, addToast, refreshData, departments,
-    ambulanceVehicles, doctors, wasOfflineRef, donorsList
+    logout, t, beds, setBeds, patients, setPatients, ambulanceRequests, 
+    bloodBank, setBloodBank, inventory, setInventory, surgeries, setSurgeries, addToast, refreshData, departments,
+    ambulanceVehicles, setAmbulanceVehicles, doctors, setDoctors, wasOfflineRef, donorsList, setDonorsList
   } = useApp();
 
   const [newVehForm, setNewVehForm] = useState({ plateNumber: '', driverName: '', driverPhone: '' });
@@ -355,13 +355,15 @@ export default function AdminDashboard() {
       title: 'Delete Bed Location',
       message: `Are you sure you want to permanently delete bed location ${bedId}?`,
       onConfirm: async () => {
+        setBeds(prev => prev.filter(b => b.bedId !== bedId));
+        setSelectedBed(null);
+        addToast(`Bed ${bedId} deleted successfully!`, 'success');
         try {
           await api.delete(`/beds/${bedId}`);
-          addToast(`Bed ${bedId} deleted successfully!`, 'success');
-          setSelectedBed(null);
           refreshData();
         } catch (err) {
           addToast(err.message, 'error');
+          refreshData();
         }
       }
     });
@@ -396,12 +398,14 @@ export default function AdminDashboard() {
       title: 'Remove Ambulance Vehicle',
       message: `Are you sure you want to permanently remove vehicle ${ambulanceId} from fleet registry?`,
       onConfirm: async () => {
+        setAmbulanceVehicles(prev => prev.filter(v => v.ambulanceId !== ambulanceId));
+        addToast(`Vehicle removed successfully!`, 'success');
         try {
           await api.delete(`/ambulance/vehicles/${ambulanceId}`);
-          addToast(`Vehicle removed successfully!`, 'success');
           refreshData();
         } catch (err) {
           addToast(err.message, 'error');
+          refreshData();
         }
       }
     });
@@ -468,12 +472,14 @@ export default function AdminDashboard() {
       title: 'Remove Blood Donor',
       message: `Are you sure you want to permanently delete blood donor ${name} from the registry log?`,
       onConfirm: async () => {
+        setDonorsList(prev => prev.filter(d => d.donorId !== donorId));
+        addToast(`Donor ${name} removed successfully!`, 'success');
         try {
           await api.delete(`/bloodbank/donors-list/${donorId}`);
-          addToast(`Donor ${name} removed successfully!`, 'success');
           refreshData();
         } catch (err) {
           addToast(err.message, 'error');
+          refreshData();
         }
       }
     });
@@ -566,12 +572,14 @@ export default function AdminDashboard() {
       title: 'Remove Doctor from Registry',
       message: `Are you sure you want to permanently remove doctor record for ID ${doctorId}?`,
       onConfirm: async () => {
+        setDoctors(prev => prev.filter(d => d.doctorId !== doctorId));
+        addToast('Doctor removed successfully!', 'success');
         try {
           await api.delete(`/doctors/${doctorId}`);
-          addToast('Doctor removed successfully!', 'success');
           refreshData();
         } catch (err) {
           addToast(err.message, 'error');
+          refreshData();
         }
       }
     });
@@ -1170,13 +1178,17 @@ export default function AdminDashboard() {
                                 title: 'Remove Patient Record',
                                 message: `Are you sure you want to permanently delete patient ${selectedPatient.name} and all related clinical data? This action is irreversible.`,
                                 onConfirm: async () => {
+                                  const targetId = selectedPatient.patientId;
+                                  const targetName = selectedPatient.name;
+                                  setPatients(prev => prev.filter(p => p.patientId !== targetId));
+                                  setSelectedPatient(null);
+                                  addToast(`Patient ${targetName} deleted successfully`, 'success');
                                   try {
-                                    await api.delete(`/patients/${selectedPatient.patientId}`);
-                                    addToast(`Patient ${selectedPatient.name} deleted successfully`, 'success');
-                                    setSelectedPatient(null);
+                                    await api.delete(`/patients/${targetId}`);
                                     refreshData();
                                   } catch (err) {
                                     addToast(err.message, 'error');
+                                    refreshData();
                                   }
                                 }
                               });
@@ -2434,12 +2446,14 @@ export default function AdminDashboard() {
                                     title: 'Delete Product SKU',
                                     message: `Are you sure you want to permanently delete SKU ${i.sku} (${i.name}) from the stock catalog?`,
                                     onConfirm: async () => {
+                                      setInventory(prev => prev.filter(item => item.itemId !== i.itemId));
+                                      addToast(`Deleted SKU ${i.sku} (${i.name})`, 'success');
                                       try {
                                         await api.delete(`/inventory/${i.itemId}`);
-                                        addToast(`Deleted SKU ${i.sku} (${i.name})`, 'success');
                                         refreshData();
                                       } catch (err) {
                                         addToast(err.message, 'error');
+                                        refreshData();
                                       }
                                     }
                                   });

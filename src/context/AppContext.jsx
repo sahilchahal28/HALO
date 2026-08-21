@@ -407,7 +407,7 @@ export function AppProvider({ children }) {
     const socket = createSocket(token);
     socket.on('sync', () => {
       clearTimeout(syncDebounceRef.current);
-      syncDebounceRef.current = setTimeout(() => refreshDataRef.current?.(), 250);
+      syncDebounceRef.current = setTimeout(() => refreshDataRef.current?.(), 50);
     });
     return () => {
       clearTimeout(syncDebounceRef.current);
@@ -434,21 +434,33 @@ export function AppProvider({ children }) {
       toasts,
       wasOfflineRef,
       
-      // Synced states
+      // Synced states & setters for optimistic instant UI updates
       patients,
+      setPatients,
       beds,
+      setBeds,
       ambulanceRequests,
+      setAmbulanceRequests,
       bloodBank,
+      setBloodBank,
       inventory,
+      setInventory,
       surgeries,
+      setSurgeries,
       doctorNotifications,
+      setDoctorNotifications,
       patientEpisode,
+      setPatientEpisode,
       patientProfile,
+      setPatientProfile,
       departments,
       patientDocuments,
       ambulanceVehicles,
+      setAmbulanceVehicles,
       doctors,
+      setDoctors,
       donorsList,
+      setDonorsList,
       
       // Force refresh trigger helper
       refreshData
