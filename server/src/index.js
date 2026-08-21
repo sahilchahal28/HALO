@@ -6,8 +6,15 @@ import { connectDB } from './config/db.js';
 
 const PORT = process.env.PORT || 5001;
 
-// Initialize Database Connection
-connectDB();
+// Connect to the database BEFORE accepting traffic so no request ever hits
+// a half-initialized Mongoose connection (critical for cold starts on hosts
+// like Railway where Atlas is reached over the public internet).
+try {
+  await connectDB();
+} catch (err) {
+  console.error('[HALO Server] Database connection failed:', err.message);
+  process.exit(1);
+}
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`[HALO Server] Listening on port ${PORT} (all interfaces)...`);
