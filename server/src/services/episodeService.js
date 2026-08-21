@@ -205,15 +205,23 @@ export async function updateEpisode(episodeId, updateData, actor) {
 
   // Handle doctor reassignment when doctor scans QR code or sets attention toggle
   if (updateData.doctorId) {
-    episode.doctorId = updateData.doctorId;
     const doc = await Doctor.findOne({ doctorId: updateData.doctorId });
-    if (doc) {
-      episode.doctorName = doc.name;
-      if (doc.phone) episode.doctorPhone = doc.phone;
+    // Never write an assignment to a non-existent/ghost doctor profile —
+    // that would leave a stale doctorName on the episode.
+    if (!doc) {
+      const err = new Error('Doctor profile not found. Please sign in again and rescan.');
+      err.statusCode = 400;
+      throw err;
     }
+    // Verified against the DB — the record is the single source of truth for
+    // identity fields; client-sent names/phones are ignored on reassignment.
+    episode.doctorId = doc.doctorId;
+    episode.doctorName = doc.name;
+    if (doc.phone) episode.doctorPhone = doc.phone;
+  } else {
+    if (updateData.doctorName) episode.doctorName = updateData.doctorName;
+    if (updateData.doctorPhone) episode.doctorPhone = updateData.doctorPhone;
   }
-  if (updateData.doctorName) episode.doctorName = updateData.doctorName;
-  if (updateData.doctorPhone) episode.doctorPhone = updateData.doctorPhone;
 
   // Handle direct attention toggle (exclusive to only one marked patient per doctor)
   if (updateData.requiresAttention !== undefined) {

@@ -105,7 +105,7 @@ router.post('/login', async (req, res, next) => {
 
 // Silent session refresh using the httpOnly cookie — keeps installed PWAs
 // signed in across server restarts and long periods of non-use.
-router.post('/refresh', (req, res) => {
+router.post('/refresh', async (req, res, next) => {
   const cookies = parseCookies(req);
   const refreshToken = cookies[REFRESH_COOKIE];
 
@@ -117,6 +117,22 @@ router.post('/refresh', (req, res) => {
   if (!decoded || !decoded.sub) {
     clearRefreshCookie(res);
     return res.status(401).json({ message: 'Session expired. Please sign in again.' });
+  }
+
+  // Validate the account still exists — prevents ghost sessions carrying
+  // deleted/migrated IDs from silently re-entering the system.
+  if (decoded.role === 'DOCTOR') {
+    const doctor = await Doctor.findOne({ doctorId: decoded.sub });
+    if (!doctor || doctor.status !== 'ACTIVE') {
+      clearRefreshCookie(res);
+      return res.status(401).json({ message: 'Your doctor profile is no longer active. Please sign in again.' });
+    }
+  } else if (decoded.role === 'PATIENT') {
+    const patient = await Patient.findOne({ patientId: decoded.sub });
+    if (!patient) {
+      clearRefreshCookie(res);
+      return res.status(401).json({ message: 'Your patient profile no longer exists. Please sign in again.' });
+    }
   }
 
   const payload = {

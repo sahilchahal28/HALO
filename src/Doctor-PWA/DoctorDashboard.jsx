@@ -196,8 +196,11 @@ export default function DoctorDashboard() {
             doctorPhone: phone
           });
           setActiveEpisode(updated);
+          addToast(`Patient assigned to you`, 'success');
         }
-      } catch (_) {}
+      } catch (err) {
+        addToast(err.message || 'Failed to assign this patient to you.', 'error');
+      }
     }
   };
 
