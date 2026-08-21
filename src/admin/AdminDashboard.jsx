@@ -700,57 +700,66 @@ export default function AdminDashboard() {
           
           <button 
             onClick={() => setActiveTab('overview')} 
-            className={`w-full text-left px-3.5 py-2.5 rounded-[11px] text-sm flex items-center gap-3 transition-all cursor-pointer ${activeTab === 'overview' ? 'bg-ink text-canvas font-semibold shadow-sm' : 'text-ink hover:bg-divider-soft font-medium'}`}
+            className={`w-full text-left justify-start px-3.5 py-2.5 rounded-[11px] text-sm flex items-center gap-3 transition-all cursor-pointer ${activeTab === 'overview' ? 'bg-ink text-canvas font-semibold shadow-sm' : 'text-ink hover:bg-divider-soft font-medium'}`}
           >
-            <Building2 size={16} /> Overview Command
+            <Building2 size={16} className="shrink-0" />
+            <span>Overview Command</span>
           </button>
           <button 
             onClick={() => setActiveTab('register')} 
-            className={`w-full text-left px-3.5 py-2.5 rounded-[11px] text-sm flex items-center gap-3 transition-all cursor-pointer ${activeTab === 'register' ? 'bg-ink text-canvas font-semibold shadow-sm' : 'text-ink hover:bg-divider-soft font-medium'}`}
+            className={`w-full text-left justify-start px-3.5 py-2.5 rounded-[11px] text-sm flex items-center gap-3 transition-all cursor-pointer ${activeTab === 'register' ? 'bg-ink text-canvas font-semibold shadow-sm' : 'text-ink hover:bg-divider-soft font-medium'}`}
           >
-            <UserPlus size={16} /> Register Patient
+            <UserPlus size={16} className="shrink-0" />
+            <span>Register Patient</span>
           </button>
           <button 
             onClick={() => setActiveTab('patients')} 
-            className={`w-full text-left px-3.5 py-2.5 rounded-[11px] text-sm flex items-center gap-3 transition-all cursor-pointer ${activeTab === 'patients' ? 'bg-ink text-canvas font-semibold shadow-sm' : 'text-ink hover:bg-divider-soft font-medium'}`}
+            className={`w-full text-left justify-start px-3.5 py-2.5 rounded-[11px] text-sm flex items-center gap-3 transition-all cursor-pointer ${activeTab === 'patients' ? 'bg-ink text-canvas font-semibold shadow-sm' : 'text-ink hover:bg-divider-soft font-medium'}`}
           >
-            <Users size={16} /> Patients Directory
+            <Users size={16} className="shrink-0" />
+            <span>Patients Directory</span>
           </button>
           <button 
             onClick={() => setActiveTab('beds')} 
-            className={`w-full text-left px-3.5 py-2.5 rounded-[11px] text-sm flex items-center gap-3 transition-all cursor-pointer ${activeTab === 'beds' ? 'bg-ink text-canvas font-semibold shadow-sm' : 'text-ink hover:bg-divider-soft font-medium'}`}
+            className={`w-full text-left justify-start px-3.5 py-2.5 rounded-[11px] text-sm flex items-center gap-3 transition-all cursor-pointer ${activeTab === 'beds' ? 'bg-ink text-canvas font-semibold shadow-sm' : 'text-ink hover:bg-divider-soft font-medium'}`}
           >
-            <Bed size={16} /> Bed Management
+            <Bed size={16} className="shrink-0" />
+            <span>Bed Management</span>
           </button>
           <button 
             onClick={() => setActiveTab('doctors')} 
-            className={`w-full text-left px-3.5 py-2.5 rounded-[11px] text-sm flex items-center gap-3 transition-all cursor-pointer ${activeTab === 'doctors' ? 'bg-ink text-canvas font-semibold shadow-sm' : 'text-ink hover:bg-divider-soft font-medium'}`}
+            className={`w-full text-left justify-start px-3.5 py-2.5 rounded-[11px] text-sm flex items-center gap-3 transition-all cursor-pointer ${activeTab === 'doctors' ? 'bg-ink text-canvas font-semibold shadow-sm' : 'text-ink hover:bg-divider-soft font-medium'}`}
           >
-            <Stethoscope size={16} /> Doctors Registry
+            <Stethoscope size={16} className="shrink-0" />
+            <span>Doctors Registry</span>
           </button>
           <button 
             onClick={() => setActiveTab('ambulance')} 
-            className={`w-full text-left px-3.5 py-2.5 rounded-[11px] text-sm flex items-center gap-3 transition-all cursor-pointer ${activeTab === 'ambulance' ? 'bg-ink text-canvas font-semibold shadow-sm' : 'text-ink hover:bg-divider-soft font-medium'}`}
+            className={`w-full text-left justify-start px-3.5 py-2.5 rounded-[11px] text-sm flex items-center gap-3 transition-all cursor-pointer ${activeTab === 'ambulance' ? 'bg-ink text-canvas font-semibold shadow-sm' : 'text-ink hover:bg-divider-soft font-medium'}`}
           >
-            <Truck size={16} /> Ambulance Control
+            <Truck size={16} className="shrink-0" />
+            <span>Ambulance Control</span>
           </button>
           <button 
             onClick={() => setActiveTab('blood')} 
-            className={`w-full text-left px-3.5 py-2.5 rounded-[11px] text-sm flex items-center gap-3 transition-all cursor-pointer ${activeTab === 'blood' ? 'bg-ink text-canvas font-semibold shadow-sm' : 'text-ink hover:bg-divider-soft font-medium'}`}
+            className={`w-full text-left justify-start px-3.5 py-2.5 rounded-[11px] text-sm flex items-center gap-3 transition-all cursor-pointer ${activeTab === 'blood' ? 'bg-ink text-canvas font-semibold shadow-sm' : 'text-ink hover:bg-divider-soft font-medium'}`}
           >
-            <Droplet size={16} /> Blood Bank Module
+            <Droplet size={16} className="shrink-0" />
+            <span>Blood Bank Module</span>
           </button>
           <button 
             onClick={() => setActiveTab('inventory')} 
-            className={`w-full text-left px-3.5 py-2.5 rounded-[11px] text-sm flex items-center gap-3 transition-all cursor-pointer ${activeTab === 'inventory' ? 'bg-ink text-canvas font-semibold shadow-sm' : 'text-ink hover:bg-divider-soft font-medium'}`}
+            className={`w-full text-left justify-start px-3.5 py-2.5 rounded-[11px] text-sm flex items-center gap-3 transition-all cursor-pointer ${activeTab === 'inventory' ? 'bg-ink text-canvas font-semibold shadow-sm' : 'text-ink hover:bg-divider-soft font-medium'}`}
           >
-            <Package size={16} /> Pharmacy Inventory
+            <Package size={16} className="shrink-0" />
+            <span>Pharmacy Inventory</span>
           </button>
           <button 
             onClick={() => setActiveTab('surgeries')} 
-            className={`w-full text-left px-3.5 py-2.5 rounded-[11px] text-sm flex items-center gap-3 transition-all cursor-pointer ${activeTab === 'surgeries' ? 'bg-ink text-canvas font-semibold shadow-sm' : 'text-ink hover:bg-divider-soft font-medium'}`}
+            className={`w-full text-left justify-start px-3.5 py-2.5 rounded-[11px] text-sm flex items-center gap-3 transition-all cursor-pointer ${activeTab === 'surgeries' ? 'bg-ink text-canvas font-semibold shadow-sm' : 'text-ink hover:bg-divider-soft font-medium'}`}
           >
-            <Calendar size={16} /> OT Surgeries
+            <Calendar size={16} className="shrink-0" />
+            <span>OT Surgeries</span>
           </button>
         </aside>
 
