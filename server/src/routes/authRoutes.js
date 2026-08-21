@@ -58,10 +58,11 @@ router.post('/login', async (req, res, next) => {
         return res.status(401).json({ message: 'Invalid admin credentials.' });
       }
     } else if (role === 'DOCTOR') {
+      // Case-insensitive ID match so stored IDs of any casing work
       const doctor = await Doctor.findOne({
         phone: cleanPhone,
-        doctorId: cleanId,
-        status: 'ACTIVE'
+        status: 'ACTIVE',
+        $expr: { $eq: [{ $toUpper: '$doctorId' }, cleanId] }
       });
 
       if (!doctor) {
@@ -71,9 +72,10 @@ router.post('/login', async (req, res, next) => {
       payload = { sub: doctor.doctorId, role: 'DOCTOR', name: doctor.name };
     } else if (role === 'PATIENT') {
       // Allow patient to login even if their profile status is INACTIVE
+      // Case-insensitive ID match so stored IDs of any casing work
       const patient = await Patient.findOne({
         phone: cleanPhone,
-        patientId: cleanId
+        $expr: { $eq: [{ $toUpper: '$patientId' }, cleanId] }
       });
 
       if (!patient) {
