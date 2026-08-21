@@ -695,62 +695,62 @@ export default function AdminDashboard() {
       <div className="flex flex-1 flex-col lg:flex-row">
         
         {/* Left Nav Menu Sidebar */}
-        <aside className="w-full lg:w-64 shrink-0 border-r border-hairline bg-canvas-parchment p-6 flex flex-col gap-1 lg:sticky lg:top-24 lg:h-[calc(100vh-6rem)] overflow-y-auto">
-          <h2 className="text-xs text-ink-muted-48 tracking-widest uppercase mb-4 pl-4 font-semibold">Management</h2>
+        <aside className="w-full lg:w-64 shrink-0 border-r border-hairline bg-canvas-parchment p-6 flex flex-col gap-1.5 lg:sticky lg:top-24 lg:h-[calc(100vh-6rem)] overflow-y-auto">
+          <h2 className="text-xs text-ink-muted-48 tracking-widest uppercase mb-3 pl-3.5 font-semibold">Management</h2>
           
           <button 
             onClick={() => setActiveTab('overview')} 
-            className={`w-full text-left px-4 py-3 rounded-[11px] text-sm flex items-center gap-3 transition-all cursor-pointer ${activeTab === 'overview' ? 'bg-ink text-canvas font-medium' : 'text-ink hover:bg-divider-soft'}`}
+            className={`w-full text-left px-3.5 py-2.5 rounded-[11px] text-sm flex items-center gap-3 transition-all cursor-pointer ${activeTab === 'overview' ? 'bg-ink text-canvas font-semibold shadow-sm' : 'text-ink hover:bg-divider-soft font-medium'}`}
           >
-            <Building2 size={15} /> Overview Command
+            <Building2 size={16} /> Overview Command
           </button>
           <button 
             onClick={() => setActiveTab('register')} 
-            className={`w-full text-left px-4 py-3 rounded-[11px] text-sm flex items-center gap-3 transition-all cursor-pointer ${activeTab === 'register' ? 'bg-ink text-canvas font-medium' : 'text-ink hover:bg-divider-soft'}`}
+            className={`w-full text-left px-3.5 py-2.5 rounded-[11px] text-sm flex items-center gap-3 transition-all cursor-pointer ${activeTab === 'register' ? 'bg-ink text-canvas font-semibold shadow-sm' : 'text-ink hover:bg-divider-soft font-medium'}`}
           >
-            <UserPlus size={15} /> Register Patient
+            <UserPlus size={16} /> Register Patient
           </button>
           <button 
             onClick={() => setActiveTab('patients')} 
-            className={`w-full text-left px-4 py-3 rounded-[11px] text-sm flex items-center gap-3 transition-all cursor-pointer ${activeTab === 'patients' ? 'bg-ink text-canvas font-medium' : 'text-ink hover:bg-divider-soft'}`}
+            className={`w-full text-left px-3.5 py-2.5 rounded-[11px] text-sm flex items-center gap-3 transition-all cursor-pointer ${activeTab === 'patients' ? 'bg-ink text-canvas font-semibold shadow-sm' : 'text-ink hover:bg-divider-soft font-medium'}`}
           >
-            <Users size={15} /> Patients Directory
+            <Users size={16} /> Patients Directory
           </button>
           <button 
             onClick={() => setActiveTab('beds')} 
-            className={`w-full text-left px-4 py-3 rounded-[11px] text-sm flex items-center gap-3 transition-all cursor-pointer ${activeTab === 'beds' ? 'bg-ink text-canvas font-medium' : 'text-ink hover:bg-divider-soft'}`}
+            className={`w-full text-left px-3.5 py-2.5 rounded-[11px] text-sm flex items-center gap-3 transition-all cursor-pointer ${activeTab === 'beds' ? 'bg-ink text-canvas font-semibold shadow-sm' : 'text-ink hover:bg-divider-soft font-medium'}`}
           >
-            <Bed size={15} /> Bed Management
+            <Bed size={16} /> Bed Management
           </button>
           <button 
             onClick={() => setActiveTab('doctors')} 
-            className={`w-full text-left px-4 py-3 rounded-[11px] text-sm flex items-center gap-3 transition-all cursor-pointer ${activeTab === 'doctors' ? 'bg-ink text-canvas font-medium' : 'text-ink hover:bg-divider-soft'}`}
+            className={`w-full text-left px-3.5 py-2.5 rounded-[11px] text-sm flex items-center gap-3 transition-all cursor-pointer ${activeTab === 'doctors' ? 'bg-ink text-canvas font-semibold shadow-sm' : 'text-ink hover:bg-divider-soft font-medium'}`}
           >
-            <Stethoscope size={15} /> Doctors Registry
+            <Stethoscope size={16} /> Doctors Registry
           </button>
           <button 
             onClick={() => setActiveTab('ambulance')} 
-            className={`w-full text-left px-4 py-3 rounded-[11px] text-sm flex items-center gap-3 transition-all cursor-pointer ${activeTab === 'ambulance' ? 'bg-ink text-canvas font-medium' : 'text-ink hover:bg-divider-soft'}`}
+            className={`w-full text-left px-3.5 py-2.5 rounded-[11px] text-sm flex items-center gap-3 transition-all cursor-pointer ${activeTab === 'ambulance' ? 'bg-ink text-canvas font-semibold shadow-sm' : 'text-ink hover:bg-divider-soft font-medium'}`}
           >
-            <Truck size={15} /> Ambulance Control
+            <Truck size={16} /> Ambulance Control
           </button>
           <button 
             onClick={() => setActiveTab('blood')} 
-            className={`w-full text-left px-4 py-3 rounded-[11px] text-sm flex items-center gap-3 transition-all cursor-pointer ${activeTab === 'blood' ? 'bg-ink text-canvas font-medium' : 'text-ink hover:bg-divider-soft'}`}
+            className={`w-full text-left px-3.5 py-2.5 rounded-[11px] text-sm flex items-center gap-3 transition-all cursor-pointer ${activeTab === 'blood' ? 'bg-ink text-canvas font-semibold shadow-sm' : 'text-ink hover:bg-divider-soft font-medium'}`}
           >
-            <Droplet size={15} /> Blood Bank Module
+            <Droplet size={16} /> Blood Bank Module
           </button>
           <button 
             onClick={() => setActiveTab('inventory')} 
-            className={`w-full text-left px-4 py-3 rounded-[11px] text-sm flex items-center gap-3 transition-all cursor-pointer ${activeTab === 'inventory' ? 'bg-ink text-canvas font-medium' : 'text-ink hover:bg-divider-soft'}`}
+            className={`w-full text-left px-3.5 py-2.5 rounded-[11px] text-sm flex items-center gap-3 transition-all cursor-pointer ${activeTab === 'inventory' ? 'bg-ink text-canvas font-semibold shadow-sm' : 'text-ink hover:bg-divider-soft font-medium'}`}
           >
-            <Package size={15} /> Pharmacy Inventory
+            <Package size={16} /> Pharmacy Inventory
           </button>
           <button 
             onClick={() => setActiveTab('surgeries')} 
-            className={`w-full text-left px-4 py-3 rounded-[11px] text-sm flex items-center gap-3 transition-all cursor-pointer ${activeTab === 'surgeries' ? 'bg-ink text-canvas font-medium' : 'text-ink hover:bg-divider-soft'}`}
+            className={`w-full text-left px-3.5 py-2.5 rounded-[11px] text-sm flex items-center gap-3 transition-all cursor-pointer ${activeTab === 'surgeries' ? 'bg-ink text-canvas font-semibold shadow-sm' : 'text-ink hover:bg-divider-soft font-medium'}`}
           >
-            <Calendar size={15} /> OT Surgeries
+            <Calendar size={16} /> OT Surgeries
           </button>
         </aside>
 
@@ -2288,46 +2288,46 @@ export default function AdminDashboard() {
                     <table className="w-full text-left border-collapse text-xs">
                       <thead>
                         <tr className="border-b border-hairline text-ink-muted-48 uppercase font-semibold text-[10px]">
-                          <th className="pb-3">Blood Group</th>
-                          <th className="pb-3">Available Units</th>
-                          <th className="pb-3">Reserved Units</th>
-                          <th className="pb-3">Status</th>
-                          <th className="pb-3 text-right">Adjust Stock Quantity</th>
+                          <th className="pb-3.5 w-[15%]">Blood Group</th>
+                          <th className="pb-3.5 w-[22%]">Available Units</th>
+                          <th className="pb-3.5 w-[22%]">Reserved Units</th>
+                          <th className="pb-3.5 w-[23%]">Status</th>
+                          <th className="pb-3.5 w-[18%] text-right">Adjust Stock Quantity</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-hairline">
                         {bloodBank.map(b => {
                           const isCritical = b.unitsAvailable <= 1;
                           return (
-                            <tr key={b.bloodGroup} className="align-middle">
-                              <td className="py-4">
+                            <tr key={b.bloodGroup} className="align-middle h-14">
+                              <td className="py-3.5">
                                 <span className="text-sm font-bold text-ink">{b.bloodGroup}</span>
                               </td>
-                              <td className="py-4 text-xs font-semibold text-ink">
+                              <td className="py-3.5 text-xs font-semibold text-ink">
                                 {b.unitsAvailable} Units
                               </td>
-                              <td className="py-4 text-xs text-ink-muted-48">
+                              <td className="py-3.5 text-xs text-ink-muted-48">
                                 {b.unitsReserved} Units
                               </td>
-                              <td className="py-4">
-                                <span className={`text-[9px] uppercase font-bold px-2 py-0.5 rounded-full ${
+                              <td className="py-3.5">
+                                <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[9px] uppercase font-bold tracking-wider ${
                                   isCritical ? 'bg-red-100 text-[#cf2d56]' : 'bg-green-100 text-[#1f8a65]'
                                 }`}>
                                   {isCritical ? 'CRITICAL SHORTAGE' : 'STABLE STOCK'}
                                 </span>
                               </td>
-                              <td className="py-4 text-right">
-                                <div className="flex justify-end items-center gap-2">
+                              <td className="py-3.5 text-right">
+                                <div className="inline-flex justify-end items-center gap-2">
                                   <button
                                     onClick={() => handleUpdateBloodStock(b.bloodGroup, 'DECREMENT')}
-                                    className="w-8 h-8 rounded-full border border-hairline bg-canvas hover:bg-canvas-parchment flex justify-center items-center font-bold text-ink cursor-pointer transition-colors"
+                                    className="w-8 h-8 rounded-full border border-hairline bg-canvas hover:bg-canvas-parchment shrink-0 inline-flex items-center justify-center font-bold text-ink cursor-pointer transition-colors"
                                   >
                                     -
                                   </button>
-                                  <span className="text-xs font-mono font-semibold w-8 text-center">{b.unitsAvailable}</span>
+                                  <span className="text-xs font-mono font-bold w-9 text-center inline-block">{b.unitsAvailable}</span>
                                   <button
                                     onClick={() => handleUpdateBloodStock(b.bloodGroup, 'INCREMENT')}
-                                    className="w-8 h-8 rounded-full border border-hairline bg-canvas hover:bg-canvas-parchment flex justify-center items-center font-bold text-ink cursor-pointer transition-colors"
+                                    className="w-8 h-8 rounded-full border border-hairline bg-canvas hover:bg-canvas-parchment shrink-0 inline-flex items-center justify-center font-bold text-ink cursor-pointer transition-colors"
                                   >
                                     +
                                   </button>
