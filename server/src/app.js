@@ -56,6 +56,7 @@ app.get('/health', (req, res) => {
     db: {
       state: states[mongoose.connection.readyState] || mongoose.connection.readyState,
       host: mongoose.connection.host || null,
+      uriConfigured: Boolean(process.env.MONGO_URI),
     },
   });
 });
