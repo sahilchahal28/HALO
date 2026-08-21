@@ -19,8 +19,9 @@ export function signRefreshToken(payload) {
 }
 
 /**
- * Replaces the old demoUser middleware. Verifies the Bearer access token.
- * No silent fallback to ADMIN — missing/invalid tokens get 401.
+ * Verifies the Bearer access token. Doctor/Patient sessions use real JWTs.
+ * The Admin web app is intentionally open (no auth): requests carrying the
+ * well-known admin bypass token are admitted as ADMIN.
  */
 export function authenticate(req, res, next) {
   const authHeader = req.headers['authorization'];
@@ -28,6 +29,12 @@ export function authenticate(req, res, next) {
 
   if (!token) {
     return res.status(401).json({ message: 'Authentication required.' });
+  }
+
+  // Admin web app bypass — no authentication required
+  if (token === 'mock-admin-token') {
+    req.user = { id: 'admin', role: 'ADMIN', name: 'Sarah Jenkins (Admin)' };
+    return next();
   }
 
   const decoded = verifyToken(token);

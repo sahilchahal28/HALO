@@ -96,12 +96,27 @@ export function AppProvider({ children }) {
   };
 
   // Load user based on active pathname or saved credentials.
-  // If no local session exists, try a silent refresh via the httpOnly cookie
-  // so installed PWAs stay signed in across restarts and long gaps in usage.
+  // The Admin web app is intentionally open — /admin paths get an automatic
+  // session with no login. Doctor/Patient PWAs restore their real JWT session,
+  // or silently refresh it via the httpOnly cookie after long gaps in usage.
   useEffect(() => {
     let cancelled = false;
 
     async function bootSession() {
+      const path = window.location.pathname;
+      if (path.startsWith('/admin')) {
+        const adminUser = { id: 'admin', role: 'ADMIN', name: 'Sarah Jenkins (Admin)' };
+        const adminToken = 'mock-admin-token';
+        setToken(adminToken);
+        setUser(adminUser);
+        try {
+          localStorage.setItem('halo_token', adminToken);
+          localStorage.setItem('halo_user', JSON.stringify(adminUser));
+        } catch (_) {}
+        setLoading(false);
+        return;
+      }
+
       try {
         const savedToken = localStorage.getItem('halo_token');
         const savedUser = localStorage.getItem('halo_user');
@@ -160,7 +175,22 @@ export function AppProvider({ children }) {
   const login = async (role, credentials) => {
     setLoading(true);
     try {
-      // All roles (including ADMIN) authenticate through the backend API
+      if (role === 'ADMIN') {
+        // Admin web app is open — no authentication required
+        const adminUser = { id: 'admin', role: 'ADMIN', name: 'Sarah Jenkins (Admin)' };
+        const adminToken = 'mock-admin-token';
+        setToken(adminToken);
+        setUser(adminUser);
+        try {
+          localStorage.setItem('halo_token', adminToken);
+          localStorage.setItem('halo_user', JSON.stringify(adminUser));
+        } catch (_) {}
+        addToast('Signed in as Admin', 'success');
+        setLoading(false);
+        return adminUser;
+      }
+
+      // Doctor/Patient authenticate through the backend API
       const res = await api.post('/auth/login', {
         role,
         phone: credentials.phone,
