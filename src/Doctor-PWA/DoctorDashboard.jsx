@@ -802,7 +802,7 @@ export default function DoctorDashboard() {
             </div>
 
             {/* Direct attention line toggler */}
-            {activeEpisode && (
+            {selectedPatient && (
               <div 
                 className="bg-canvas border border-hairline p-4 flex items-center justify-between"
                 style={{ borderRadius: '18px' }}
@@ -815,7 +815,7 @@ export default function DoctorDashboard() {
                 </div>
                 <input
                   type="checkbox"
-                  checked={activeEpisode.requiresAttention}
+                  checked={Boolean(activeEpisode?.requiresAttention)}
                   onChange={(e) => handleToggleAttention(e.target.checked)}
                   className="w-5 h-5 accent-primary cursor-pointer border-hairline"
                 />
