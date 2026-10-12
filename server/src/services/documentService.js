@@ -12,6 +12,9 @@ import {
   generatePresignedDownloadUrl,
   checkS3ObjectExists,
   deleteS3Object,
+  putS3Object,
+  putS3ObjectMultipart,
+  isTransientS3Error,
   BUCKET_NAME,
 } from '../config/s3.js';
 
@@ -156,6 +159,112 @@ export async function initiateDocumentUpload({
     uploadUrl,
     isMock,
   };
+}
+
+/**
+ * 1b. Direct multipart upload: Receives file buffer, validates, uploads directly to S3 / Cloudflare R2,
+ * and saves active document metadata. Completely eliminates CORS and presigned URL routing issues.
+ */
+export async function directDocumentUpload({
+  patientId,
+  treatmentEpisodeId,
+  type,
+  title,
+  file,
+  department = 'GENERAL',
+  doctor = null,
+  doctorId = null,
+  examinationDate = new Date(),
+  actor,
+  actorRole,
+}) {
+  if (!patientId) {
+    const err = new Error('patientId is required');
+    err.status = 400;
+    throw err;
+  }
+
+  if (!file || !file.buffer) {
+    const err = new Error('No file provided for upload');
+    err.status = 400;
+    throw err;
+  }
+
+  const mimeType = file.mimetype;
+  const fileSize = file.size;
+
+  if (!ALLOWED_MIME_TYPES.includes(mimeType)) {
+    const err = new Error(`Invalid file type: ${mimeType}. Allowed types: PDF, JPEG, PNG.`);
+    err.status = 400;
+    throw err;
+  }
+
+  if (fileSize > MAX_FILE_SIZE_BYTES) {
+    const err = new Error(`File size exceeds maximum limit of ${MAX_FILE_SIZE_BYTES / (1024 * 1024)}MB.`);
+    err.status = 400;
+    throw err;
+  }
+
+  const patient = await Patient.findOne({ patientId });
+  if (!patient) {
+    const err = new Error('Patient not found');
+    err.status = 404;
+    throw err;
+  }
+
+  if (actorRole === 'PATIENT' && actor.id !== patientId && actor.patientId !== patientId) {
+    const err = new Error('Unauthorized: Patients can only upload documents to their own record.');
+    err.status = 403;
+    throw err;
+  }
+
+  const ext = mimeType === 'application/pdf' ? 'pdf' : mimeType === 'image/png' ? 'png' : 'jpg';
+  const uniqueToken = crypto.randomUUID();
+  const s3Key = `records/${patientId}/${Date.now()}-${uniqueToken}.${ext}`;
+
+  const count = await MedicalDocument.countDocuments();
+  const documentId = `DOC-${10000 + count}`;
+  const retentionPolicy = calculateRetentionPolicy(type, examinationDate);
+
+  // Upload buffer to S3 / Cloudflare R2
+  await putS3Object({
+    key: s3Key,
+    buffer: file.buffer,
+    mimeType,
+  });
+
+  const document = new MedicalDocument({
+    documentId,
+    patientId,
+    treatmentEpisodeId: treatmentEpisodeId || null,
+    type,
+    title: title || file.originalname || `Medical Record (${type})`,
+    mimeType,
+    fileSize,
+    s3Key,
+    s3Bucket: BUCKET_NAME,
+    fileRef: s3Key,
+    department: department || 'GENERAL',
+    doctor: doctor || null,
+    doctorId: doctorId || null,
+    examinationDate: new Date(examinationDate),
+    status: 'ACTIVE',
+    retentionPolicy,
+    uploadedBy: actor.name || actor.id,
+    uploadedByRole: actorRole,
+  });
+
+  await document.save();
+
+  await logAction({
+    actor: actor.name || actor.id,
+    action: 'Document Uploaded Directly',
+    entityType: 'MedicalDocument',
+    entityId: documentId,
+    metadata: { patientId, type, title: document.title, s3Key, fileSize },
+  });
+
+  return document;
 }
 
 /**

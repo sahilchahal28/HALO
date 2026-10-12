@@ -1118,29 +1118,16 @@ export default function DoctorDashboard() {
                       setUploadingDoc(true);
                       try {
                         if (selectedFile) {
-                          // 1. Request presigned upload URL
-                          const intentRes = await api.post('/documents/upload-intent', {
-                            patientId: selectedPatient.patientId,
-                            treatmentEpisodeId: activeEpisode?.episodeId,
-                            type: docForm.type,
-                            title: docForm.title,
-                            mimeType: selectedFile.type,
-                            fileSize: selectedFile.size,
-                            department: selectedPatient.department || 'GENERAL',
-                            doctor: user?.name,
-                          });
+                          const formData = new FormData();
+                          formData.append('file', selectedFile);
+                          formData.append('patientId', selectedPatient.patientId);
+                          if (activeEpisode?.episodeId) formData.append('treatmentEpisodeId', activeEpisode.episodeId);
+                          formData.append('type', docForm.type);
+                          formData.append('title', docForm.title);
+                          formData.append('department', selectedPatient.department || 'GENERAL');
+                          if (user?.name) formData.append('doctor', user.name);
 
-                          // 2. Direct upload to S3 / R2
-                          if (intentRes.uploadUrl) {
-                            await fetch(intentRes.uploadUrl, {
-                              method: 'PUT',
-                              headers: { 'Content-Type': selectedFile.type },
-                              body: selectedFile,
-                            });
-                          }
-
-                          // 3. Confirm upload
-                          await api.post(`/documents/${intentRes.document.documentId}/confirm`);
+                          await api.post('/documents/upload', formData);
                         } else {
                           // Metadata-only fallback
                           await api.post(`/patients/${selectedPatient.patientId}/documents`, {

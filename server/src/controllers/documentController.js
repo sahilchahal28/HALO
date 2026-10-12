@@ -17,6 +17,24 @@ export async function initiateUpload(req, res, next) {
   }
 }
 
+export async function directUpload(req, res, next) {
+  try {
+    const actor = req.user || { id: 'admin', role: 'ADMIN', name: 'Admin' };
+    const actorRole = actor.role;
+
+    const result = await documentService.directDocumentUpload({
+      ...req.body,
+      file: req.file,
+      actor,
+      actorRole,
+    });
+
+    res.status(201).json(result);
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function confirmUpload(req, res, next) {
   try {
     const { documentId } = req.params;

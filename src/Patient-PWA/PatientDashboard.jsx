@@ -840,28 +840,15 @@ export default function PatientDashboard() {
                     setUploadingDoc(true);
                     try {
                       if (selectedUploadFile) {
-                        // 1. Initiate upload
-                        const intentRes = await api.post('/documents/upload-intent', {
-                          patientId: user.patientId,
-                          treatmentEpisodeId: patientEpisode?.episodeId,
-                          type: uploadDocForm.type,
-                          title: uploadDocForm.title,
-                          mimeType: selectedUploadFile.type,
-                          fileSize: selectedUploadFile.size,
-                          department: 'GENERAL',
-                        });
+                        const formData = new FormData();
+                        formData.append('file', selectedUploadFile);
+                        formData.append('patientId', user.patientId);
+                        if (patientEpisode?.episodeId) formData.append('treatmentEpisodeId', patientEpisode.episodeId);
+                        formData.append('type', uploadDocForm.type);
+                        formData.append('title', uploadDocForm.title);
+                        formData.append('department', 'GENERAL');
 
-                        // 2. PUT file directly to S3 / R2 presigned URL
-                        if (intentRes.uploadUrl) {
-                          await fetch(intentRes.uploadUrl, {
-                            method: 'PUT',
-                            headers: { 'Content-Type': selectedUploadFile.type },
-                            body: selectedUploadFile,
-                          });
-                        }
-
-                        // 3. Confirm upload
-                        await api.post(`/documents/${intentRes.document.documentId}/confirm`);
+                        await api.post('/documents/upload', formData);
                       } else {
                         // Fallback metadata
                         await api.post(`/patients/${user.patientId}/documents`, {

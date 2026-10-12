@@ -58,7 +58,7 @@ async function rawRequest(endpoint, options = {}, isRetry = false) {
   const token = getToken();
 
   const headers = {
-    ...(options.body && { 'Content-Type': 'application/json' }),
+    ...(options.body && !(options.body instanceof FormData) && { 'Content-Type': 'application/json' }),
     ...(token && { Authorization: `Bearer ${token}` }),
     ...options.headers,
   };
