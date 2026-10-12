@@ -143,6 +143,29 @@ io.use((socket, next) => {
 
 io.on('connection', (socket) => {
   console.log(`[Realtime] Client connected (${socket.data.user?.role}). Total: ${io.engine.clientsCount}`);
+
+  // Admin automatically joins patient:all for the full archive mirror
+  if (socket.data.user?.role === 'ADMIN') {
+    socket.join('patient:all');
+  }
+
+  // Subscribe to a specific patient room (for doctor viewing patient, or patient viewing own)
+  socket.on('subscribe:patient', (patientId) => {
+    if (patientId) {
+      const room = `patient:${String(patientId).trim()}`;
+      socket.join(room);
+      console.log(`[Realtime] Socket ${socket.id} (${socket.data.user?.role}) joined room: ${room}`);
+    }
+  });
+
+  socket.on('unsubscribe:patient', (patientId) => {
+    if (patientId) {
+      const room = `patient:${String(patientId).trim()}`;
+      socket.leave(room);
+      console.log(`[Realtime] Socket ${socket.id} left room: ${room}`);
+    }
+  });
+
   socket.on('disconnect', () => {
     console.log(`[Realtime] Client disconnected. Total: ${io.engine.clientsCount}`);
   });

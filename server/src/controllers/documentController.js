@@ -1,3 +1,4 @@
+import fs from 'fs';
 import * as documentService from '../services/documentService.js';
 
 /**
@@ -31,6 +32,38 @@ export async function directUpload(req, res, next) {
     });
 
     console.log('[Upload] Success:', { documentId: result.documentId });
+
+    // Realtime notification to patient room & admin room
+    const io = req.app.get('io');
+    if (io && result.patientId) {
+      const payload = {
+        documentId: result.documentId,
+        patientId: result.patientId,
+        fileKey: result.s3Key,
+        metadata: {
+          documentId: result.documentId,
+          patientId: result.patientId,
+          treatmentEpisodeId: result.treatmentEpisodeId,
+          type: result.type,
+          title: result.title,
+          mimeType: result.mimeType,
+          fileSize: result.fileSize,
+          department: result.department,
+          doctor: result.doctor,
+          doctorId: result.doctorId,
+          examinationDate: result.examinationDate,
+          status: result.status,
+          legalHold: result.legalHold,
+          retentionPolicy: result.retentionPolicy,
+          uploadedBy: result.uploadedBy,
+          uploadedByRole: result.uploadedByRole,
+          createdAt: result.createdAt,
+          updatedAt: result.updatedAt,
+        },
+      };
+      io.to(`patient:${result.patientId}`).to('patient:all').emit('document:uploaded', payload);
+    }
+
     res.status(201).json(result);
   } catch (err) {
     console.error('[Upload] Error:', { message: err.message, status: err.status, stack: err.stack });
@@ -82,6 +115,60 @@ export async function getDownloadUrl(req, res, next) {
 }
 
 /**
+ * GET /api/documents/:documentId/blob
+ * Direct binary stream for IndexedDB cache synchronization.
+ */
+export async function streamDocumentBlob(req, res, next) {
+  try {
+    const { documentId } = req.params;
+    const actor = req.user || { id: 'admin', role: 'ADMIN', name: 'Admin' };
+    const actorRole = actor.role;
+
+    const { filePath, mimeType, filename } = await documentService.getDocumentBlobStream({
+      documentId,
+      actor,
+      actorRole,
+    });
+
+    res.setHeader('Content-Type', mimeType);
+    res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(filename)}"`);
+    res.setHeader('Cache-Control', 'private, max-age=3600');
+
+    const stream = fs.createReadStream(filePath);
+    stream.on('error', (err) => {
+      console.error('[Document Blob Stream] Stream error:', err);
+      if (!res.headersSent) res.status(500).json({ error: 'Failed to stream document blob.' });
+    });
+    stream.pipe(res);
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * GET /api/documents/sync-delta
+ * Returns incremental delta changes for IndexedDB syncing.
+ */
+export async function getSyncDelta(req, res, next) {
+  try {
+    const actor = req.user || { id: 'admin', role: 'ADMIN', name: 'Admin' };
+    const actorRole = actor.role;
+    const { patientId, since } = req.query;
+
+    const delta = await documentService.getSyncDelta({
+      patientId,
+      since,
+      actor,
+      actorRole,
+    });
+
+    res.json(delta);
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
  * DELETE /api/documents/:documentId
  * Patient-only: delete a medical record from disk and database.
  */
@@ -96,6 +183,16 @@ export async function deleteDocument(req, res, next) {
       actor,
       actorRole,
     });
+
+    // Realtime notification
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`patient:${result.patientId || ''}`).to('patient:all').emit('document:deleted', {
+        documentId: result.documentId,
+        fileKey: result.fileKey,
+        patientId: result.patientId,
+      });
+    }
 
     res.json(result);
   } catch (err) {

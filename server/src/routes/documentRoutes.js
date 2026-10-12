@@ -74,6 +74,8 @@ router.get('/file/:encodedKey', (req, res) => {
 router.post('/upload', upload.single('file'), documentController.directUpload);
 
 // ─── Metadata endpoints ───────────────────────────────────────────────────────
+router.get('/sync-delta', documentController.getSyncDelta);
+router.get('/:documentId/blob', documentController.streamDocumentBlob);
 router.get('/', documentController.listDocuments);
 router.get('/:documentId/download-url', documentController.getDownloadUrl);
 router.delete('/:documentId', documentController.deleteDocument); // Patient ONLY

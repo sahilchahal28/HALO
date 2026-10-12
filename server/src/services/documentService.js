@@ -418,7 +418,7 @@ export async function deleteDocument({ documentId, actor, actorRole }) {
     metadata: { patientId: document.patientId, title: document.title },
   });
 
-  return { success: true, documentId, status: 'DELETED' };
+  return { success: true, documentId, patientId: document.patientId, fileKey: document.s3Key, status: 'DELETED' };
 }
 
 // ─── Legal Hold ──────────────────────────────────────────────────────────────
@@ -516,3 +516,104 @@ export async function runRetentionDeletionWorker() {
 
   return summary;
 }
+
+// ─── Binary Blob Stream for Sync ─────────────────────────────────────────────
+
+/**
+ * Get direct filesystem path and metadata for a document's binary blob.
+ * Used by the sync engine to populate client-side IndexedDB caches.
+ */
+export async function getDocumentBlobStream({ documentId, actor, actorRole }) {
+  const document = await MedicalDocument.findOne({ documentId });
+  if (!document) {
+    const err = new Error('Document not found');
+    err.status = 404;
+    throw err;
+  }
+
+  if (document.status === 'DELETED') {
+    const err = new Error('Document has been permanently removed.');
+    err.status = 410;
+    throw err;
+  }
+
+  // Authorization check
+  await assertPatientAccess(actor, document.patientId);
+
+  const filePath = getLocalFilePath(document.s3Key);
+  const { exists } = await checkLocalObjectExists({ key: document.s3Key });
+  if (!exists) {
+    const err = new Error('File not found on storage — it may have been deleted by the retention policy.');
+    err.status = 404;
+    throw err;
+  }
+
+  return {
+    filePath,
+    mimeType: document.mimeType || 'application/octet-stream',
+    filename: document.title,
+    document,
+  };
+}
+
+// ─── Sync Delta ──────────────────────────────────────────────────────────────
+
+/**
+ * Return incremental document changes since a given timestamp for IndexedDB sync.
+ */
+export async function getSyncDelta({ patientId, since, actor, actorRole }) {
+  if (actorRole === 'PATIENT') {
+    const allowedId = actor.patientId || actor.id;
+    patientId = allowedId;
+  } else if (actorRole === 'DOCTOR') {
+    if (!patientId) {
+      const err = new Error('patientId is required for sync delta.');
+      err.status = 400;
+      throw err;
+    }
+    await assertPatientAccess(actor, patientId);
+  }
+
+  const query = {};
+  if (patientId) {
+    query.patientId = new RegExp(`^${patientId}$`, 'i');
+  }
+  if (since) {
+    const sinceDate = new Date(since);
+    query.$or = [
+      { updatedAt: { $gte: sinceDate } },
+      { createdAt: { $gte: sinceDate } },
+      { deletedAt: { $gte: sinceDate } },
+    ];
+  }
+
+  const docs = await MedicalDocument.find(query).sort({ updatedAt: -1 }).limit(200);
+
+  return docs.map((doc) => ({
+    documentId: doc.documentId,
+    fileKey: doc.s3Key,
+    patientId: doc.patientId,
+    action: doc.status === 'DELETED' ? 'delete' : 'upsert',
+    metadata: {
+      documentId: doc.documentId,
+      patientId: doc.patientId,
+      treatmentEpisodeId: doc.treatmentEpisodeId,
+      type: doc.type,
+      title: doc.title,
+      mimeType: doc.mimeType,
+      fileSize: doc.fileSize,
+      department: doc.department,
+      doctor: doc.doctor,
+      doctorId: doc.doctorId,
+      examinationDate: doc.examinationDate,
+      status: doc.status,
+      legalHold: doc.legalHold,
+      retentionPolicy: doc.retentionPolicy,
+      uploadedBy: doc.uploadedBy,
+      uploadedByRole: doc.uploadedByRole,
+      createdAt: doc.createdAt,
+      updatedAt: doc.updatedAt,
+    },
+  }));
+}
+

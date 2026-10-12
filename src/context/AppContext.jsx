@@ -4,6 +4,7 @@ import { api, SESSION_REJECTED } from '../utils/api';
 import { createSocket } from '../utils/socket';
 import { flushQueue } from '../utils/offlineQueue';
 import { translations } from '../utils/translations';
+import { HALOArchive } from '../services/objectStore/syncEngine';
 
 const AppContext = createContext();
 
@@ -496,6 +497,10 @@ export function AppProvider({ children }) {
   useEffect(() => {
     if (!token) return;
     const socket = createSocket(token);
+
+    // Bind HALOArchive for real-time document synchronization across PWAs
+    HALOArchive.bindSocket(socket, user?.role, user?.patientId || user?.id);
+
     socket.on('sync', () => {
       clearTimeout(syncDebounceRef.current);
       syncDebounceRef.current = setTimeout(() => refreshDataRef.current?.(), 50);
@@ -504,7 +509,7 @@ export function AppProvider({ children }) {
       clearTimeout(syncDebounceRef.current);
       socket.disconnect();
     };
-  }, [token]);
+  }, [token, user?.role, user?.patientId, user?.id]);
 
   // Stable ref so the socket handler always calls the latest refreshData
   const refreshDataRef = useRef(refreshData);
