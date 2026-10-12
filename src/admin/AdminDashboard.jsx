@@ -2210,61 +2210,71 @@ export default function AdminDashboard() {
                     <div className="overflow-x-auto">
                       <table className="w-full text-left border-collapse text-xs">
                         <thead>
-                          <tr className="border-b border-hairline text-ink-muted-48 uppercase font-semibold text-[10px]">
-                            <th className="pb-3">Doctor ID</th>
-                            <th className="pb-3">Doctor Name</th>
-                            <th className="pb-3">Specialty</th>
-                            <th className="pb-3">Department</th>
-                            <th className="pb-3">Status</th>
-                            <th className="pb-3 text-right">Actions</th>
+                          <tr className="border-b border-hairline text-ink-muted-48 uppercase font-semibold text-[10px] tracking-wider">
+                            <th className="pb-3.5 pl-1 pr-3 w-[18%] whitespace-nowrap">Doctor ID</th>
+                            <th className="pb-3.5 px-3 w-[21%] whitespace-nowrap">Doctor Name</th>
+                            <th className="pb-3.5 px-3 w-[25%] whitespace-nowrap">Specialty</th>
+                            <th className="pb-3.5 px-3 w-[14%] whitespace-nowrap">Department</th>
+                            <th className="pb-3.5 px-2 w-[8%] whitespace-nowrap">Status</th>
+                            <th className="pb-3.5 pl-3 pr-1 text-right w-[14%] whitespace-nowrap">Actions</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-hairline">
                           {doctors.map(d => (
-                            <tr key={d.doctorId} className="align-middle">
-                              <td className="py-4 text-ink font-mono">{d.doctorId}</td>
-                              <td className="py-4 font-semibold text-ink">
-                                {d.name}
-                                <span className="text-[10px] text-ink-muted-48 font-mono block mt-0.5">{d.phone || 'No Contact'}</span>
+                            <tr key={d.doctorId} className="align-middle hover:bg-canvas-parchment/40 transition-colors">
+                              <td className="py-4 pl-1 pr-3 text-ink font-mono text-[11px] whitespace-nowrap font-medium">
+                                {d.doctorId}
                               </td>
-                              <td className="py-4 text-ink-muted-85">{d.specialty}</td>
-                              <td className="py-4 text-ink-muted-85 uppercase font-semibold text-[10px]">{d.department || 'GENERAL'}</td>
-                              <td className="py-4">
-                                <span className={`text-[8px] uppercase font-bold px-2 py-0.5 rounded-full ${d.status === 'ACTIVE' ? 'bg-green-100 text-[#1f8a65]' : 'bg-gray-100 text-gray-500'
+                              <td className="py-4 px-3">
+                                <div className="font-semibold text-ink text-xs leading-tight">{d.name}</div>
+                                <span className="text-[10px] text-ink-muted-48 font-mono block mt-1 tracking-tight">{d.phone || 'No Contact'}</span>
+                              </td>
+                              <td className="py-4 px-3 text-ink-muted-85 text-xs leading-relaxed">
+                                {d.specialty}
+                              </td>
+                              <td className="py-4 px-3 whitespace-nowrap">
+                                <span className="text-[10px] uppercase font-semibold text-ink-muted-85 tracking-wider">
+                                  {d.department || 'GENERAL'}
+                                </span>
+                              </td>
+                              <td className="py-4 px-2 whitespace-nowrap">
+                                <span className={`text-[8px] uppercase font-bold px-2 py-0.5 rounded-full inline-block ${d.status === 'ACTIVE' ? 'bg-green-100 text-[#1f8a65]' : 'bg-gray-100 text-gray-500'
                                   }`}>
                                   {d.status}
                                 </span>
                               </td>
-                              <td className="py-4 text-right space-x-3">
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setConfirmModal({
-                                      isOpen: true,
-                                      title: 'Reset Doctor Security PIN',
-                                      message: `Reset security PIN to default (123456) for Dr. ${d.name} (${d.doctorId || d.id})?`,
-                                      onConfirm: async () => {
-                                        try {
-                                          await api.post(`/doctors/${d.doctorId || d.id}/reset-pin`);
-                                          addToast(`Security PIN reset to 123456 for Dr. ${d.name}`, 'success');
-                                        } catch (err) {
-                                          addToast(err.message || 'Failed to reset PIN', 'error');
+                              <td className="py-4 pl-3 pr-1 text-right whitespace-nowrap">
+                                <div className="inline-flex items-center justify-end gap-3">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setConfirmModal({
+                                        isOpen: true,
+                                        title: 'Reset Doctor Security PIN',
+                                        message: `Reset security PIN to default (123456) for Dr. ${d.name} (${d.doctorId || d.id})?`,
+                                        onConfirm: async () => {
+                                          try {
+                                            await api.post(`/doctors/${d.doctorId || d.id}/reset-pin`);
+                                            addToast(`Security PIN reset to 123456 for Dr. ${d.name}`, 'success');
+                                          } catch (err) {
+                                            addToast(err.message || 'Failed to reset PIN', 'error');
+                                          }
                                         }
-                                      }
-                                    });
-                                  }}
-                                  className="text-[10px] text-primary hover:underline uppercase font-bold cursor-pointer inline-flex items-center gap-1"
-                                  title="Reset PIN to default 123456"
-                                >
-                                  <KeyRound size={11} />
-                                  <span>Reset PIN</span>
-                                </button>
-                                <button
-                                  onClick={() => handleDeleteDoctor(d.doctorId)}
-                                  className="text-[10px] text-[#cf2d56] hover:underline uppercase font-bold cursor-pointer"
-                                >
-                                  Delete
-                                </button>
+                                      });
+                                    }}
+                                    className="text-[10px] text-primary hover:underline uppercase font-bold cursor-pointer inline-flex items-center gap-1 transition-colors"
+                                    title="Reset PIN to default 123456"
+                                  >
+                                    <KeyRound size={11} />
+                                    <span>Reset PIN</span>
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteDoctor(d.doctorId)}
+                                    className="text-[10px] text-[#cf2d56] hover:underline uppercase font-bold cursor-pointer transition-colors"
+                                  >
+                                    Delete
+                                  </button>
+                                </div>
                               </td>
                             </tr>
                           ))}
