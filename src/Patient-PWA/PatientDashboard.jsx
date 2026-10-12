@@ -862,7 +862,7 @@ export default function PatientDashboard() {
                       setUploadDocForm({ title: '', type: 'LAB_REPORT' });
                       setSelectedUploadFile(null);
                       setShowUploadModal(false);
-                      addToast('Medical record securely stored in private S3 storage!', 'success');
+                      addToast('Medical record saved to device storage!', 'success');
                       refreshData();
                     } catch (err) {
                       addToast(err.message || 'Upload failed', 'error');
@@ -873,7 +873,10 @@ export default function PatientDashboard() {
                   className="bg-canvas border border-hairline p-4 space-y-3"
                   style={{ borderRadius: '18px' }}
                 >
-                  <h3 className="text-xs font-semibold text-ink uppercase tracking-wider">Upload New Document to S3</h3>
+                  <h3 className="text-xs font-semibold text-ink uppercase tracking-wider">Upload Medical Record (Saved Locally)</h3>
+                  <p className="text-[10px] text-amber-600 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
+                    ⚠️ <strong>Retention Policy:</strong> Lab reports, imaging &amp; test results are <strong>auto-deleted after 6 months</strong> from the examination date. Prescriptions, discharge summaries &amp; referrals are stored permanently on this device.
+                  </p>
                   
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     <input
@@ -926,7 +929,7 @@ export default function PatientDashboard() {
                     disabled={uploadingDoc}
                     className="w-full bg-primary hover:bg-primary-focus text-canvas text-xs font-semibold py-2.5 rounded-full transition-colors uppercase cursor-pointer"
                   >
-                    {uploadingDoc ? 'Encrypting & Uploading to S3...' : 'Save & Secure Document'}
+                    {uploadingDoc ? 'Saving to device...' : 'Save to Device Storage'}
                   </button>
                 </form>
               )}

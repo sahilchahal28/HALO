@@ -7,18 +7,23 @@ import AmbulanceRequest from '../models/AmbulanceRequest.js';
 import BloodInventory from '../models/BloodInventory.js';
 import InventoryItem from '../models/InventoryItem.js';
 import AuditLog from '../models/AuditLog.js';
-import { checkS3Health } from '../config/s3.js';
+import { checkStorageHealth } from '../config/localStorage.js';
 
 const router = express.Router();
 
-router.get('/s3-health', async (req, res, next) => {
+router.get('/storage-health', async (req, res, next) => {
   try {
-    const health = await checkS3Health();
+    const health = checkStorageHealth();
     const statusCode = health.healthy ? 200 : 503;
     res.status(statusCode).json(health);
   } catch (err) {
     next(err);
   }
+});
+
+// Legacy alias so any existing health-check callers don't 404
+router.get('/s3-health', async (_req, res) => {
+  res.json(checkStorageHealth());
 });
 
 router.get('/audit', async (req, res, next) => {

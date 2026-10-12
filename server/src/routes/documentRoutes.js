@@ -1,42 +1,79 @@
 import express from 'express';
 import multer from 'multer';
+import path from 'path';
+import fs from 'fs';
 import * as documentController from '../controllers/documentController.js';
-import { mockStorage } from '../config/s3.js';
+import { getLocalFilePath, decodeFileKey } from '../config/localStorage.js';
 
 const router = express.Router();
+
+// Accept files up to 15 MB in memory — then write to disk via the service
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 15 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const allowed = ['application/pdf', 'image/jpeg', 'image/png'];
+    if (allowed.includes(file.mimetype)) return cb(null, true);
+    cb(new Error(`Unsupported file type: ${file.mimetype}. Only PDF, JPEG, and PNG are accepted.`));
+  },
 });
 
-// Robust mock endpoints for local/test offline development without AWS credentials
-router.put('/mock-upload', express.raw({ type: '*/*', limit: '20mb' }), (req, res) => {
-  const key = req.query.key || 'default';
-  mockStorage.set(key, {
-    data: req.body,
-    contentType: req.headers['content-type'],
-  });
-  res.status(200).send();
-});
+// ─── File Serve Route ─────────────────────────────────────────────────────────
+/**
+ * GET /api/documents/file/:encodedKey
+ *
+ * Serves a medical-record file directly from the local filesystem.
+ * The :encodedKey is the base64url-encoded file key built by buildLocalDownloadUrl().
+ *
+ * Authorization is handled by the authenticate middleware applied in app.js.
+ * Fine-grained patient ↔ document ownership is enforced in the documentService
+ * (getDocumentDownloadUrl) before a URL is ever generated.
+ */
+router.get('/file/:encodedKey', (req, res) => {
+  try {
+    const fileKey = decodeFileKey(req.params.encodedKey);
+    const filePath = getLocalFilePath(fileKey);
 
-router.get('/mock-file', (req, res) => {
-  const key = req.query.key || 'default';
-  const file = mockStorage.get(key);
-  if (!file) {
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', 'inline; filename="mock-record.pdf"');
-    return res.send(Buffer.from('%PDF-1.4\n1 0 obj\n<< /Title (HALO Medical Record) >>\nendobj\ntrailer\n<<>>\n%%EOF'));
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ error: 'File not found. It may have been deleted by the retention policy.' });
+    }
+
+    const filename = req.query.name || path.basename(filePath);
+    const ext = path.extname(filePath).toLowerCase();
+    const mimeMap = { '.pdf': 'application/pdf', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png' };
+    const contentType = mimeMap[ext] || 'application/octet-stream';
+
+    res.setHeader('Content-Type', contentType);
+    // Inline display for images / PDFs; attachment for unknown types
+    const disposition = ['application/pdf', 'image/jpeg', 'image/png'].includes(contentType)
+      ? `inline; filename="${filename}"`
+      : `attachment; filename="${filename}"`;
+    res.setHeader('Content-Disposition', disposition);
+    res.setHeader('Cache-Control', 'private, max-age=300'); // 5-min browser cache
+
+    fs.createReadStream(filePath).pipe(res);
+  } catch (err) {
+    console.error('[File Serve] Error:', err.message);
+    res.status(500).json({ error: 'Failed to serve file.' });
   }
-  res.setHeader('Content-Type', file.contentType || 'application/octet-stream');
-  res.send(file.data);
 });
 
-// Direct multipart upload (Preferred: handles buffer on backend, avoids all browser CORS & presigned issues)
+// ─── Upload ───────────────────────────────────────────────────────────────────
+/**
+ * POST /api/documents/upload
+ *
+ * Accepts multipart/form-data with a single "file" field.
+ * The file is written directly to the local filesystem — no cloud storage.
+ *
+ * ⚠️  RETENTION NOTICE shown in the UI:
+ *   Lab reports, imaging results, and test reports are automatically deleted
+ *   6 months after the examination date.
+ *   Prescriptions, discharge summaries, referrals, and other documents
+ *   are stored permanently.
+ */
 router.post('/upload', upload.single('file'), documentController.directUpload);
 
-// Presigned URL flow routes
-router.post('/upload-intent', documentController.initiateUpload);
-router.post('/:documentId/confirm', documentController.confirmUpload);
+// ─── Metadata endpoints ───────────────────────────────────────────────────────
 router.get('/', documentController.listDocuments);
 router.get('/:documentId/download-url', documentController.getDownloadUrl);
 router.delete('/:documentId', documentController.deleteDocument); // Patient ONLY

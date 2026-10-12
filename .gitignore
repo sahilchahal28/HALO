@@ -23,3 +23,8 @@ dist-ssr
 *.sln
 *.sw?
 .env
+
+# Local medical-record storage (device-local files — never commit patient data)
+server/storage/**
+!server/storage/**/.gitkeep
+server/.mock-s3/

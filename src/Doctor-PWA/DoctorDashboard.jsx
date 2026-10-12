@@ -1159,7 +1159,7 @@ export default function DoctorDashboard() {
 
                         setDocForm({ title: '', type: 'LAB_REPORT' });
                         setSelectedFile(null);
-                        addToast('Document successfully secured in S3 storage!', 'success');
+                        addToast('Document saved to device storage!', 'success');
                         
                         // Reload docs
                         const docs = await api.get(`/patients/${selectedPatient.patientId}/documents`);
@@ -1174,7 +1174,10 @@ export default function DoctorDashboard() {
                     }}
                     className="border-t border-hairline pt-4 space-y-3"
                   >
-                    <span className="text-[11px] text-ink block font-semibold uppercase">Attach New Record to Private S3</span>
+                    <span className="text-[11px] text-ink block font-semibold uppercase">Attach Record to Patient File (Saved Locally)</span>
+                    <p className="text-[10px] text-amber-600 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
+                      ⚠️ <strong>Retention Policy:</strong> Lab reports, imaging &amp; test results are <strong>auto-deleted after 6 months</strong> from examination date. Prescriptions, discharge summaries &amp; referrals are stored permanently on this device.
+                    </p>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                       <input 
                         type="text" placeholder="Title (e.g. Chest X-Ray Scan)" required
@@ -1223,7 +1226,7 @@ export default function DoctorDashboard() {
                       className="w-full bg-ink hover:bg-ink-muted-80 text-canvas text-xs font-semibold py-2.5 rounded-full transition-colors uppercase cursor-pointer"
                       style={{ borderRadius: '20px' }}
                     >
-                      {uploadingDoc ? 'Encrypting & Storing in S3...' : 'Upload & Secure in S3'}
+                      {uploadingDoc ? 'Saving to device...' : 'Upload & Save to Device'}
                     </button>
                   </form>
                 </div>

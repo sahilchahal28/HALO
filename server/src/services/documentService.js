@@ -1,3 +1,25 @@
+/**
+ * documentService.js
+ *
+ * Medical-record management service — backed by the LOCAL FILESYSTEM.
+ * All S3 / Cloudflare R2 code has been removed.
+ *
+ * Storage layout (on this machine):
+ *   server/storage/users/records/<patientId>/<timestamp>-<uuid>.<ext>
+ *
+ * Retention Rule (STRICT):
+ *   LAB_REPORT, IMAGING, TEST_REPORT older than 6 months (180 days) → auto-deleted.
+ *   PRESCRIPTION, DISCHARGE_SUMMARY, REFERRAL, OTHER                → PERMANENT.
+ *
+ * Delete Authority:
+ *   ONLY the patient who owns the record may delete it.
+ *   Doctors and Admins are explicitly forbidden from deleting.
+ *
+ * Network Sync:
+ *   Uploads are committed to disk immediately.  When Wi-Fi is available
+ *   the stubbed syncToRemoteIfOnline() can be wired to push files to a
+ *   remote destination without changing this layer.
+ */
 import crypto from 'crypto';
 import MedicalDocument, {
   ALLOWED_MIME_TYPES,
@@ -9,20 +31,23 @@ import TreatmentEpisode from '../models/TreatmentEpisode.js';
 import Doctor from '../models/Doctor.js';
 import { logAction } from './auditService.js';
 import {
-  generatePresignedUploadUrl,
-  generatePresignedDownloadUrl,
-  checkS3ObjectExists,
-  deleteS3Object,
-  putS3Object,
-  putS3ObjectMultipart,
-  isTransientS3Error,
-  BUCKET_NAME,
-} from '../config/s3.js';
+  putLocalObject,
+  deleteLocalObject,
+  checkLocalObjectExists,
+  buildLocalDownloadUrl,
+  buildFileKey,
+  syncToRemoteIfOnline,
+  getLocalFilePath,
+} from '../config/localStorage.js';
+
+// ─── Retention Policy ────────────────────────────────────────────────────────
 
 /**
  * Calculate retention policy based on document type and examination date.
- * Rule: Reports and tests older than 6 months (180 days) are scheduled for auto-deletion.
- * Prescriptions, discharge summaries, and referrals are preserved permanently.
+ *
+ * ⚠️  RULE: Reports and tests (LAB_REPORT, IMAGING, TEST_REPORT) older than
+ *     6 months (180 days) from their examination date are automatically deleted.
+ *     All other document types are kept PERMANENTLY.
  */
 export function calculateRetentionPolicy(type, examinationDate = new Date()) {
   const isEligible = RETENTION_ELIGIBLE_TYPES.includes(type);
@@ -46,125 +71,15 @@ export function calculateRetentionPolicy(type, examinationDate = new Date()) {
   };
 }
 
-/**
- * 1. Initiate upload: Validates input, creates pending document, generates presigned upload URL.
- */
-export async function initiateDocumentUpload({
-  patientId,
-  treatmentEpisodeId,
-  type,
-  title,
-  mimeType,
-  fileSize,
-  department = 'GENERAL',
-  doctor = null,
-  doctorId = null,
-  examinationDate = new Date(),
-  actor,
-  actorRole,
-}) {
-  // Input validations
-  if (!patientId) {
-    const err = new Error('patientId is required');
-    err.status = 400;
-    throw err;
-  }
-
-  if (!ALLOWED_MIME_TYPES.includes(mimeType)) {
-    const err = new Error(`Invalid file type: ${mimeType}. Allowed types: PDF, JPEG, PNG.`);
-    err.status = 400;
-    throw err;
-  }
-
-  if (!fileSize || fileSize <= 0 || fileSize > MAX_FILE_SIZE_BYTES) {
-    const err = new Error(`File size must be between 1 byte and ${MAX_FILE_SIZE_BYTES / (1024 * 1024)}MB.`);
-    err.status = 400;
-    throw err;
-  }
-
-  // Verify patient exists
-  const patient = await Patient.findOne({ patientId });
-  if (!patient) {
-    const err = new Error('Patient not found');
-    err.status = 404;
-    throw err;
-  }
-
-  // Verify episode if provided
-  if (treatmentEpisodeId) {
-    const episode = await TreatmentEpisode.findOne({ episodeId: treatmentEpisodeId });
-    if (!episode) {
-      treatmentEpisodeId = null;
-    }
-  }
-
-  // Authorization check for upload
-  if (actorRole === 'PATIENT' && actor.id !== patientId && actor.patientId !== patientId) {
-    const err = new Error('Unauthorized: Patients can only upload documents to their own record.');
-    err.status = 403;
-    throw err;
-  }
-
-  // Generate unique opaque S3 key
-  const ext = mimeType === 'application/pdf' ? 'pdf' : mimeType === 'image/png' ? 'png' : 'jpg';
-  const uniqueToken = crypto.randomUUID();
-  const s3Key = `records/${patientId}/${Date.now()}-${uniqueToken}.${ext}`;
-
-  // Generate sequential Document ID
-  const count = await MedicalDocument.countDocuments();
-  const documentId = `DOC-${10000 + count}`;
-
-  const retentionPolicy = calculateRetentionPolicy(type, examinationDate);
-
-  const document = new MedicalDocument({
-    documentId,
-    patientId,
-    treatmentEpisodeId: treatmentEpisodeId || null,
-    type,
-    title: title || `Medical Record (${type})`,
-    mimeType,
-    fileSize,
-    s3Key,
-    s3Bucket: BUCKET_NAME,
-    fileRef: s3Key,
-    department: department || 'GENERAL',
-    doctor: doctor || null,
-    doctorId: doctorId || null,
-    examinationDate: new Date(examinationDate),
-    status: 'PENDING_UPLOAD',
-    retentionPolicy,
-    uploadedBy: actor.name || actor.id,
-    uploadedByRole: actorRole,
-  });
-
-  await document.save();
-
-  // Generate presigned upload URL
-  const { uploadUrl, isMock } = await generatePresignedUploadUrl({
-    key: s3Key,
-    mimeType,
-    contentLength: fileSize,
-  });
-
-  // Audit log upload initiation
-  await logAction({
-    actor: actor.name || actor.id,
-    action: 'Document Upload Initiated',
-    entityType: 'MedicalDocument',
-    entityId: documentId,
-    metadata: { patientId, type, title, s3Key, fileSize, isMock },
-  });
-
-  return {
-    document,
-    uploadUrl,
-    isMock,
-  };
-}
+// ─── Upload ──────────────────────────────────────────────────────────────────
 
 /**
- * 1b. Direct multipart upload: Receives file buffer, validates, uploads directly to S3 / Cloudflare R2,
- * and saves active document metadata. Completely eliminates CORS and presigned URL routing issues.
+ * Direct multipart upload:
+ *   Receives the file buffer from multer, validates it, writes it to the
+ *   local storage directory, and saves metadata to MongoDB.
+ *
+ * NOTE: There is no longer a presigned-URL / two-step upload flow.
+ *       Files go straight to disk in one request.
  */
 export async function directDocumentUpload({
   patientId,
@@ -179,6 +94,7 @@ export async function directDocumentUpload({
   actor,
   actorRole,
 }) {
+  // ── Basic validation ──
   if (!patientId) {
     const err = new Error('patientId is required');
     err.status = 400;
@@ -201,24 +117,29 @@ export async function directDocumentUpload({
   }
 
   if (fileSize > MAX_FILE_SIZE_BYTES) {
-    const err = new Error(`File size exceeds maximum limit of ${MAX_FILE_SIZE_BYTES / (1024 * 1024)}MB.`);
+    const err = new Error(`File size exceeds maximum limit of ${MAX_FILE_SIZE_BYTES / (1024 * 1024)} MB.`);
     err.status = 400;
     throw err;
   }
 
-  const patient = await Patient.findOne({ 
-    patientId: new RegExp(`^${patientId}$`, 'i') 
-  });
+  // ── Verify patient ──
+  const patient = await Patient.findOne({ patientId: new RegExp(`^${patientId}$`, 'i') });
   if (!patient) {
     const err = new Error(`Patient not found: ${patientId}`);
     err.status = 404;
-    err.statusCode = 404;
     throw err;
   }
 
-  // Resolve doctorId from doctor name if provided (doctor upload flow)
+  // ── Resolve episode ──
+  if (treatmentEpisodeId) {
+    const episode = await TreatmentEpisode.findOne({ episodeId: treatmentEpisodeId });
+    if (!episode) treatmentEpisodeId = null;
+  }
+
+  // ── Resolve doctor ──
   let resolvedDoctorId = doctorId;
   let resolvedDoctorName = doctor;
+
   if (!resolvedDoctorId && doctor) {
     const doc = await Doctor.findOne({ name: new RegExp(`^${doctor}$`, 'i') });
     if (doc) {
@@ -226,59 +147,55 @@ export async function directDocumentUpload({
       resolvedDoctorName = doc.name;
     }
   }
-  // Also check actor for doctorId if user is a doctor
+
   if (!resolvedDoctorId && actorRole === 'DOCTOR' && (actor.doctorId || actor.id)) {
     resolvedDoctorId = actor.doctorId || actor.id;
-    // Look up doctor name from ID if not already set
     if (!resolvedDoctorName && resolvedDoctorId) {
       const doc = await Doctor.findOne({ doctorId: resolvedDoctorId });
       if (doc) resolvedDoctorName = doc.name;
     }
   }
 
-  if (actorRole === 'PATIENT' && actor.id !== patient.patientId && actor.patientId !== patient.patientId) {
+  // ── Authorization ──
+  if (
+    actorRole === 'PATIENT' &&
+    actor.id !== patient.patientId &&
+    actor.patientId !== patient.patientId
+  ) {
     const err = new Error('Unauthorized: Patients can only upload documents to their own record.');
     err.status = 403;
     throw err;
   }
 
+  // ── Build file path ──
   const ext = mimeType === 'application/pdf' ? 'pdf' : mimeType === 'image/png' ? 'png' : 'jpg';
   const uniqueToken = crypto.randomUUID();
-  const s3Key = `records/${patientId}/${Date.now()}-${uniqueToken}.${ext}`;
+  const filename = `${Date.now()}-${uniqueToken}.${ext}`;
+  const fileKey = buildFileKey(patient.patientId, filename);
 
+  // ── Write to disk ──
+  await putLocalObject({ key: fileKey, buffer: file.buffer, mimeType });
+
+  // ── Try background remote sync (no-op until wired up) ──
+  syncToRemoteIfOnline(fileKey).catch(() => {});
+
+  // ── Generate document ID ──
   const count = await MedicalDocument.countDocuments();
   const documentId = `DOC-${10000 + count}`;
   const retentionPolicy = calculateRetentionPolicy(type, examinationDate);
 
-  // Use multipart upload for files >= 5MB for better reliability
-  const useMultipart = fileSize >= 5 * 1024 * 1024;
-
-  if (useMultipart) {
-    await putS3ObjectMultipart({
-      key: s3Key,
-      buffer: file.buffer,
-      mimeType,
-    });
-  } else {
-    // Upload buffer to S3 / Cloudflare R2
-    await putS3Object({
-      key: s3Key,
-      buffer: file.buffer,
-      mimeType,
-    });
-  }
-
   const document = new MedicalDocument({
     documentId,
-    patientId,
+    patientId: patient.patientId,
     treatmentEpisodeId: treatmentEpisodeId || null,
     type,
     title: title || file.originalname || `Medical Record (${type})`,
     mimeType,
     fileSize,
-    s3Key,
-    s3Bucket: BUCKET_NAME,
-    fileRef: s3Key,
+    // fileKey replaces s3Key — same field is kept for schema compatibility
+    s3Key: fileKey,
+    s3Bucket: null,
+    fileRef: fileKey,
     department: department || 'GENERAL',
     doctor: resolvedDoctorName || null,
     doctorId: resolvedDoctorId || null,
@@ -293,57 +210,23 @@ export async function directDocumentUpload({
 
   await logAction({
     actor: actor.name || actor.id,
-    action: 'Document Uploaded Directly',
+    action: 'Document Uploaded (Local Storage)',
     entityType: 'MedicalDocument',
     entityId: documentId,
-    metadata: { patientId, type, title: document.title, s3Key, fileSize },
+    metadata: { patientId: patient.patientId, type, title: document.title, fileKey, fileSize },
   });
 
   return document;
 }
 
-/**
- * 2. Confirm upload: Client notifies backend after successful upload to S3.
- */
-export async function confirmDocumentUpload({ documentId, actor, actorRole }) {
-  const document = await MedicalDocument.findOne({ documentId });
-  if (!document) {
-    const err = new Error('Document not found');
-    err.status = 404;
-    throw err;
-  }
-
-  // Authorization check
-  if (actorRole === 'PATIENT' && actor.id !== document.patientId && actor.patientId !== document.patientId) {
-    const err = new Error('Unauthorized: You can only confirm your own documents.');
-    err.status = 403;
-    throw err;
-  }
-
-  // Verify object existence in S3/R2 (or skip if mock)
-  const head = await checkS3ObjectExists({ key: document.s3Key });
-  if (!head.exists) {
-    const err = new Error('Upload verification failed: file not found in storage bucket.');
-    err.status = 400;
-    throw err;
-  }
-
-  document.status = 'ACTIVE';
-  await document.save();
-
-  await logAction({
-    actor: actor.name || actor.id,
-    action: 'Document Upload Confirmed',
-    entityType: 'MedicalDocument',
-    entityId: documentId,
-    metadata: { patientId: document.patientId, title: document.title, s3Key: document.s3Key },
-  });
-
-  return document;
-}
+// ─── List ────────────────────────────────────────────────────────────────────
 
 /**
- * 3. List documents with filtering, authorization, and server-side pagination.
+ * List documents with filtering, authorization, and server-side pagination.
+ *
+ * Retention Notice included per document:
+ *   - If type is LAB_REPORT / IMAGING / TEST_REPORT: shows expiry date.
+ *   - Otherwise: "Stored permanently".
  */
 export async function listDocuments({
   patientId,
@@ -358,7 +241,7 @@ export async function listDocuments({
   actor,
   actorRole,
 }) {
-  // Authorization: Patients can ONLY list their own documents
+  // Patients can ONLY list their own documents
   if (actorRole === 'PATIENT') {
     const allowedId = actor.patientId || actor.id;
     if (patientId && patientId !== allowedId) {
@@ -371,26 +254,14 @@ export async function listDocuments({
 
   const query = {};
 
-  if (patientId) {
-    query.patientId = patientId;
-  }
-
-  if (category) {
-    query.type = category;
-  }
-
-  if (department) {
-    query.department = department;
-  }
-
-  if (doctor) {
-    query.$or = [{ doctor }, { doctorId: doctor }];
-  }
+  if (patientId) query.patientId = patientId;
+  if (category) query.type = category;
+  if (department) query.department = department;
+  if (doctor) query.$or = [{ doctor }, { doctorId: doctor }];
 
   if (status) {
     query.status = status;
   } else {
-    // By default exclude soft-deleted or abandoned uploads
     query.status = { $in: ['ACTIVE', 'ARCHIVED'] };
   }
 
@@ -406,11 +277,35 @@ export async function listDocuments({
 
   const [totalCount, documents] = await Promise.all([
     MedicalDocument.countDocuments(query),
-    MedicalDocument.find(query).sort({ examinationDate: -1, createdAt: -1 }).skip(skip).limit(limitNum),
+    MedicalDocument.find(query)
+      .sort({ examinationDate: -1, createdAt: -1 })
+      .skip(skip)
+      .limit(limitNum),
   ]);
 
+  // Enrich each document with a pre-built download URL and retention notice
+  const enriched = documents.map((doc) => {
+    const obj = doc.toObject();
+    obj.downloadUrl = buildLocalDownloadUrl(
+      doc.s3Key,
+      `${doc.title}.${doc.mimeType === 'application/pdf' ? 'pdf' : 'jpg'}`
+    );
+
+    if (doc.retentionPolicy?.autoDelete && doc.retentionPolicy?.expiresAt) {
+      const daysLeft = Math.max(
+        0,
+        Math.ceil((doc.retentionPolicy.expiresAt - Date.now()) / (1000 * 60 * 60 * 24))
+      );
+      obj.retentionNotice = `⚠️ Auto-deleted after 6 months from examination date (${daysLeft} day${daysLeft !== 1 ? 's' : ''} remaining)`;
+    } else {
+      obj.retentionNotice = 'Stored permanently';
+    }
+
+    return obj;
+  });
+
   return {
-    data: documents,
+    data: enriched,
     pagination: {
       total: totalCount,
       page: pageNum,
@@ -420,8 +315,11 @@ export async function listDocuments({
   };
 }
 
+// ─── Download URL ────────────────────────────────────────────────────────────
+
 /**
- * 4. Generate signed download URL: short-lived, with authorization checks and audit logging.
+ * Generate a local download URL for a document.
+ * The URL is served by the Express /api/documents/file/:encodedKey endpoint.
  */
 export async function getDocumentDownloadUrl({ documentId, actor, actorRole }) {
   const document = await MedicalDocument.findOne({ documentId });
@@ -437,9 +335,7 @@ export async function getDocumentDownloadUrl({ documentId, actor, actorRole }) {
     throw err;
   }
 
-  // Authorization check:
-  // - Patient can only download their own document
-  // - Doctor & Admin can download any patient document
+  // Patients can only download their own documents
   if (actorRole === 'PATIENT') {
     const allowedId = actor.patientId || actor.id;
     if (document.patientId !== allowedId) {
@@ -449,19 +345,23 @@ export async function getDocumentDownloadUrl({ documentId, actor, actorRole }) {
     }
   }
 
-  const { downloadUrl, isMock } = await generatePresignedDownloadUrl({
-    key: document.s3Key,
-    filename: `${document.title}.${document.mimeType === 'application/pdf' ? 'pdf' : 'jpg'}`,
-    expiresIn: 900, // 15 minutes
-  });
+  // Verify the file is still on disk
+  const { exists } = await checkLocalObjectExists({ key: document.s3Key });
+  if (!exists) {
+    const err = new Error('File not found on storage — it may have been deleted by the retention policy.');
+    err.status = 404;
+    throw err;
+  }
 
-  // Audit log download
+  const filename = `${document.title}.${document.mimeType === 'application/pdf' ? 'pdf' : 'jpg'}`;
+  const downloadUrl = buildLocalDownloadUrl(document.s3Key, filename);
+
   await logAction({
     actor: actor.name || actor.id,
-    action: 'Document Downloaded',
+    action: 'Document Download URL Generated',
     entityType: 'MedicalDocument',
     entityId: documentId,
-    metadata: { patientId: document.patientId, title: document.title, s3Key: document.s3Key },
+    metadata: { patientId: document.patientId, title: document.title },
   });
 
   return {
@@ -469,16 +369,18 @@ export async function getDocumentDownloadUrl({ documentId, actor, actorRole }) {
     title: document.title,
     mimeType: document.mimeType,
     downloadUrl,
-    expiresInSeconds: 900,
-    isMock,
+    // No expiry — URL is valid as long as the file is on disk
+    expiresInSeconds: null,
   };
 }
 
+// ─── Delete (Patient Only) ───────────────────────────────────────────────────
+
 /**
- * 5. Delete document:
- * STRICT RULE: Only the patient can delete their medical record!
- * Doctors and Admins are rejected.
- * Documents under legal hold cannot be deleted.
+ * Delete a medical record.
+ *
+ * 🔒 STRICT RULE: ONLY the patient who owns the record may delete it.
+ *    Doctors and Admins are explicitly rejected.
  */
 export async function deleteDocument({ documentId, actor, actorRole }) {
   const document = await MedicalDocument.findOne({ documentId });
@@ -488,7 +390,7 @@ export async function deleteDocument({ documentId, actor, actorRole }) {
     throw err;
   }
 
-  // Strict Permission Check: ONLY the patient can delete their medical records!
+  // Strict role check
   if (actorRole !== 'PATIENT') {
     const err = new Error('Forbidden: Medical records can only be removed by the patient.');
     err.status = 403;
@@ -502,38 +404,16 @@ export async function deleteDocument({ documentId, actor, actorRole }) {
     throw err;
   }
 
-  // Legal Hold Check
+  // Legal hold check
   if (document.legalHold) {
     const err = new Error('Cannot delete document: An active legal/medical hold is in place.');
     err.status = 400;
     throw err;
   }
 
-  // Attempt S3 deletion
-  try {
-    await deleteS3Object({ key: document.s3Key });
-  } catch (s3Err) {
-    console.error(`[S3 Deletion Error] Failed to delete object ${document.s3Key}:`, s3Err.message);
-    // Mark as DELETION_FAILED for worker to retry
-    document.status = 'DELETION_FAILED';
-    document.deletionRetryCount += 1;
-    document.deletionError = s3Err.message;
-    await document.save();
+  // Delete from disk
+  await deleteLocalObject({ key: document.s3Key });
 
-    await logAction({
-      actor: actor.name || actor.id,
-      action: 'Document Deletion S3 Failure',
-      entityType: 'MedicalDocument',
-      entityId: documentId,
-      metadata: { error: s3Err.message, retryCount: document.deletionRetryCount },
-    });
-
-    const err = new Error('Storage service temporary error. Deletion queued for retry.');
-    err.status = 502;
-    throw err;
-  }
-
-  // If S3 deleted or mock deleted:
   document.status = 'DELETED';
   document.deletedAt = new Date();
   document.deletedBy = actor.name || actor.id;
@@ -544,15 +424,14 @@ export async function deleteDocument({ documentId, actor, actorRole }) {
     action: 'Document Deleted by Patient',
     entityType: 'MedicalDocument',
     entityId: documentId,
-    metadata: { patientId: document.patientId, title: document.title, s3Key: document.s3Key },
+    metadata: { patientId: document.patientId, title: document.title },
   });
 
   return { success: true, documentId, status: 'DELETED' };
 }
 
-/**
- * 6. Legal Hold Management (Doctor or Admin or Patient flag)
- */
+// ─── Legal Hold ──────────────────────────────────────────────────────────────
+
 export async function updateLegalHold({ documentId, legalHold, reason, actor, actorRole }) {
   const document = await MedicalDocument.findOne({ documentId });
   if (!document) {
@@ -579,22 +458,22 @@ export async function updateLegalHold({ documentId, legalHold, reason, actor, ac
   return document;
 }
 
+// ─── Retention Deletion Worker ───────────────────────────────────────────────
+
 /**
- * 7. Scheduled Retention Deletion Worker:
- * Rule: Automatically delete diagnostic reports & tests older than 6 months (180 days).
- * Never delete records without an applicable retention policy or with legal hold active.
- * Retries failed deletions up to 5 times.
+ * Scheduled worker that auto-purges documents past their retention expiry.
+ *
+ * ⚠️  RETENTION RULE:
+ *   Documents of type LAB_REPORT, IMAGING, or TEST_REPORT that were uploaded
+ *   (examination date) more than 6 months (180 days) ago are AUTOMATICALLY
+ *   DELETED from disk and marked DELETED in MongoDB.
+ *
+ *   This is displayed to users in the upload form and document list view.
  */
 export async function runRetentionDeletionWorker() {
   const now = new Date();
-  const summary = {
-    checked: 0,
-    purged: 0,
-    failed: 0,
-    retried: 0,
-  };
+  const summary = { checked: 0, purged: 0, failed: 0 };
 
-  // 1. Find ACTIVE documents past their expiration date that do not have legal hold
   const eligibleQuery = {
     status: 'ACTIVE',
     legalHold: { $ne: true },
@@ -607,7 +486,8 @@ export async function runRetentionDeletionWorker() {
 
   for (const doc of expiredDocs) {
     try {
-      await deleteS3Object({ key: doc.s3Key });
+      await deleteLocalObject({ key: doc.s3Key });
+
       doc.status = 'DELETED';
       doc.deletedAt = new Date();
       doc.deletedBy = 'SYSTEM_RETENTION_WORKER';
@@ -616,7 +496,7 @@ export async function runRetentionDeletionWorker() {
 
       await logAction({
         actor: 'SYSTEM_RETENTION_WORKER',
-        action: 'Document Auto-Purged by Retention Policy',
+        action: 'Document Auto-Purged by Retention Policy (6-month rule)',
         entityType: 'MedicalDocument',
         entityId: doc.documentId,
         metadata: {
@@ -627,101 +507,12 @@ export async function runRetentionDeletionWorker() {
         },
       });
     } catch (err) {
-      const isTransient = isTransientS3Error(err);
-      console.error(`[Retention Worker] Failed to purge doc ${doc.documentId}:`, {
-        error: err.message,
-        isTransient,
-        retryCount: doc.deletionRetryCount + 1,
-      });
-
-      if (isTransient && doc.deletionRetryCount < 4) {
-        // Transient error - will be retried in next cycle
-        doc.status = 'DELETION_FAILED';
-        doc.deletionRetryCount += 1;
-        doc.deletionError = `TRANSIENT: ${err.message}`;
-        await doc.save();
-        summary.failed += 1;
-      } else {
-        // Permanent error or max retries reached - alert but don't retry endlessly
-        doc.status = 'DELETION_FAILED';
-        doc.deletionRetryCount += 1;
-        doc.deletionError = `PERMANENT: ${err.message}`;
-        await doc.save();
-        summary.failed += 1;
-
-        await logAction({
-          actor: 'SYSTEM_RETENTION_WORKER',
-          action: 'Document Auto-Purge Permanent Failure',
-          entityType: 'MedicalDocument',
-          entityId: doc.documentId,
-          metadata: {
-            patientId: doc.patientId,
-            type: doc.type,
-            title: doc.title,
-            error: err.message,
-            isTransient,
-            retryCount: doc.deletionRetryCount,
-            requiresManualIntervention: true,
-          },
-        });
-      }
-    }
-  }
-
-  // 2. Retry documents in DELETION_FAILED status (up to 5 retries)
-  // Only retry if the last error was transient
-  const retryDocs = await MedicalDocument.find({
-    status: 'DELETION_FAILED',
-    legalHold: { $ne: true },
-    deletionRetryCount: { $lt: 5 },
-  }).limit(20);
-
-  for (const doc of retryDocs) {
-    // Only retry if last error was transient
-    const lastErrorTransient = doc.deletionError?.startsWith('TRANSIENT:') || false;
-    if (!lastErrorTransient && doc.deletionRetryCount > 0) {
-      console.log(`[Retention Worker] Skipping retry for ${doc.documentId} - last error was permanent`);
-      continue;
-    }
-
-    summary.retried += 1;
-    try {
-      await deleteS3Object({ key: doc.s3Key });
-      doc.status = 'DELETED';
-      doc.deletedAt = new Date();
-      doc.deletedBy = 'SYSTEM_RETENTION_RETRY_WORKER';
-      await doc.save();
-      summary.purged += 1;
-
-      await logAction({
-        actor: 'SYSTEM_RETENTION_RETRY_WORKER',
-        action: 'Document Auto-Purge Retry Succeeded',
-        entityType: 'MedicalDocument',
-        entityId: doc.documentId,
-        metadata: { patientId: doc.patientId, retryCount: doc.deletionRetryCount },
-      });
-    } catch (err) {
-      const isTransient = isTransientS3Error(err);
-      doc.deletionRetryCount += 1;
-      doc.deletionError = `${isTransient ? 'TRANSIENT' : 'PERMANENT'}: ${err.message}`;
+      console.error(`[Retention Worker] Failed to purge doc ${doc.documentId}:`, err.message);
+      doc.status = 'DELETION_FAILED';
+      doc.deletionRetryCount = (doc.deletionRetryCount || 0) + 1;
+      doc.deletionError = err.message;
       await doc.save();
       summary.failed += 1;
-
-      if (!isTransient || doc.deletionRetryCount >= 5) {
-        await logAction({
-          actor: 'SYSTEM_RETENTION_RETRY_WORKER',
-          action: 'Document Auto-Purge Retry Exhausted',
-          entityType: 'MedicalDocument',
-          entityId: doc.documentId,
-          metadata: {
-            patientId: doc.patientId,
-            error: err.message,
-            isTransient,
-            retryCount: doc.deletionRetryCount,
-            requiresManualIntervention: true,
-          },
-        });
-      }
     }
   }
 
