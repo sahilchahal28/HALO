@@ -8,7 +8,8 @@ import PatientDocumentsPanel from './components/PatientDocumentsPanel';
 import { 
   Stethoscope, Calendar, Inbox, Search, LogOut, Sparkles, 
   AlertCircle, ShieldAlert, PhoneCall, PlusCircle, CheckCircle, FileText,
-  Smartphone, Download, Users, Server
+  Smartphone, Download, Users, Server, User, Pill, ClipboardList, History,
+  CheckCircle2, HeartPulse, Activity, MessageSquare
 } from 'lucide-react';
 
 export default function DoctorDashboard() {
@@ -24,6 +25,7 @@ export default function DoctorDashboard() {
     setActiveTabState(tab);
     localStorage.setItem('halo_doctor_active_tab', tab);
   };
+  const [patientSubTab, setPatientSubTab] = useState('records');
 
   // Local state for credentials login form
   const [loginForm, setLoginForm] = useState({ phone: '', id: '' });
@@ -158,55 +160,66 @@ export default function DoctorDashboard() {
 
   // Load patient active episode, documents, and timeline if selected
   useEffect(() => {
-    if (!selectedPatient) {
+    if (!selectedPatient?.patientId) {
       setActiveEpisode(null);
       setTimelineLogs([]);
       setPatientDocuments([]);
       return;
     }
+    const pid = selectedPatient.patientId;
     async function loadEpisodeAndTimeline() {
       try {
-        const eps = await api.get(`/episodes?patientId=${selectedPatient.patientId}`);
-        const active = eps.find(e => e.status === 'ACTIVE');
-        setActiveEpisode(active || null);
-
-        const logs = await api.get(`/dashboard/audit?patientId=${selectedPatient.patientId}`);
+        const [eps, logs, docs] = await Promise.all([
+          api.get(`/episodes?patientId=${pid}`),
+          api.get(`/dashboard/audit?patientId=${pid}`),
+          api.get(`/patients/${pid}/documents`)
+        ]);
+        const active = (eps || []).find(e => e.status === 'ACTIVE') || (eps && eps[eps.length - 1]) || null;
+        setActiveEpisode(active);
         setTimelineLogs(logs || []);
-
-        const docs = await api.get(`/patients/${selectedPatient.patientId}/documents`);
         setPatientDocuments(docs || []);
       } catch (_) {}
     }
     loadEpisodeAndTimeline();
-  }, [selectedPatient, activeTab]);
+  }, [selectedPatient?.patientId, activeTab]);
 
   const handlePatientFound = async (patient) => {
     if (patient && patient.patientId) {
-      if (!activePatientIds.includes(patient.patientId)) {
-        setActivePatientIds(prev => [...prev, patient.patientId]);
+      const pid = patient.patientId;
+      if (!activePatientIds.includes(pid)) {
+        setActivePatientIds(prev => [...prev, pid]);
       }
       setSelectedPatient(patient);
       setActiveTab('patientView');
+      setPatientSubTab('records');
 
-      // Assign scanning doctor & registered phone number to patient's active treatment episode
-      try {
-        const eps = await api.get(`/episodes?patientId=${patient.patientId}`);
-        const active = eps.find(e => e.status === 'ACTIVE');
-        const docId = user?.id || user?._id;
-        const currentDoctor = (doctors || []).find(d => d.doctorId === docId) || user;
-        const phone = currentDoctor?.phone || user?.phone || '';
-
-        if (active && docId) {
-          const updated = await api.put(`/episodes/${active.episodeId}`, {
-            doctorId: docId,
-            doctorName: currentDoctor?.name || user?.name || '',
-            doctorPhone: phone
-          });
-          setActiveEpisode(updated);
-          addToast(`Patient assigned to you`, 'success');
+      // Auto-assign doctor to patient record if not already assigned
+      const docId = user?.doctorId || user?.id || user?._id;
+      if (docId) {
+        try {
+          const updatedPatient = await api.put(`/patients/${pid}/assign-doctor`, { doctorId: docId });
+          if (updatedPatient) setSelectedPatient(updatedPatient);
+          addToast(`Auto-assigned: Patient ${patient.name || patient.fullName} to your care`, 'success');
+        } catch (err) {
+          console.warn('Auto-assignment confirmation note:', err.message);
         }
+      }
+
+      // Re-fetch episodes, documents, and timeline
+      try {
+        const [eps, docs, logs] = await Promise.all([
+          api.get(`/episodes?patientId=${pid}`),
+          api.get(`/patients/${pid}/documents`),
+          api.get(`/dashboard/audit?patientId=${pid}`)
+        ]);
+        const active = (eps || []).find(e => e.status === 'ACTIVE') || (eps && eps[eps.length - 1]) || null;
+        setActiveEpisode(active);
+        const resolvedDocs = Array.isArray(docs) ? docs : (docs?.documents || docs?.files || []);
+        setPatientDocuments(resolvedDocs);
+        setTimelineLogs(logs || []);
+        refreshData();
       } catch (err) {
-        addToast(err.message || 'Failed to assign this patient to you.', 'error');
+        console.warn('Post-scan load warning:', err.message);
       }
     }
   };
@@ -768,246 +781,262 @@ export default function DoctorDashboard() {
 
         {/* ==================== 4. CLINICAL PATIENT PROFILE VIEW TAB ==================== */}
         {activeTab === 'patientView' && selectedPatient && (
-          <div className="space-y-6">
+          <div className="space-y-5">
             
             {/* Header profile brief */}
             <div 
-              className="bg-canvas border border-hairline p-4 flex justify-between items-start"
+              className="bg-canvas border border-hairline p-5 apple-product-shadow space-y-4"
               style={{ borderRadius: '18px' }}
             >
-              <div>
-                <span className="text-[9px] text-ink-muted-48 uppercase tracking-widest font-bold">Authorized File access</span>
-                <h2 className="text-lg font-semibold text-ink mt-1">{selectedPatient.name}</h2>
-                <div className="text-xs text-ink-muted-48 mt-1">
-                  ID: <span className="font-mono">{selectedPatient.patientId}</span> • UID: <span className="font-mono text-primary">{selectedPatient.aadhaarNumber ? selectedPatient.aadhaarNumber.replace(/(\d{4})(\d{4})(\d{4})/, '$1 $2 $3') : 'N/A'}</span> • Age: {selectedPatient.age} ({selectedPatient.gender})
+              <div className="flex justify-between items-start gap-3">
+                <div className="flex items-start gap-3.5">
+                  <div className="w-12 h-12 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-bold text-base shrink-0">
+                    {(selectedPatient.name || selectedPatient.fullName || 'P').charAt(0)}
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h2 className="text-lg font-bold text-ink leading-tight">
+                        {selectedPatient.name || selectedPatient.fullName}
+                      </h2>
+                      <span className="text-[10px] bg-ink text-canvas font-mono font-bold px-2 py-0.5 rounded-full">
+                        {selectedPatient.bloodGroup || 'Blood N/A'}
+                      </span>
+                      <span className="text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full font-semibold flex items-center gap-1">
+                        <CheckCircle2 size={11} /> Auto-Assigned
+                      </span>
+                    </div>
+
+                    <div className="text-[11px] text-ink-muted-48 mt-1.5 flex items-center gap-3 flex-wrap">
+                      <span>ID: <strong className="font-mono text-ink">{selectedPatient.patientId}</strong></span>
+                      <span>UID: <strong className="font-mono text-primary">{selectedPatient.aadhaarNumber ? selectedPatient.aadhaarNumber.replace(/(\d{4})(\d{4})(\d{4})/, '$1 $2 $3') : 'N/A'}</strong></span>
+                      <span>Age: <strong className="text-ink">{selectedPatient.age} Yrs ({selectedPatient.gender})</strong></span>
+                      <span>Dept: <strong className="text-ink">{selectedPatient.department || 'General Medicine'}</strong></span>
+                    </div>
+                  </div>
                 </div>
+
+                <button 
+                  onClick={() => { setSelectedPatient(null); setActiveTab('scanner'); }}
+                  className="text-xs border border-hairline hover:border-ink px-3 py-1.5 rounded-full cursor-pointer bg-canvas-parchment text-ink font-semibold shrink-0"
+                >
+                  Close File
+                </button>
               </div>
-              <button 
-                onClick={() => { setSelectedPatient(null); setActiveTab('scanner'); }}
-                className="text-xs border border-hairline hover:border-ink px-3 py-1 rounded-full cursor-pointer bg-canvas-parchment text-ink font-semibold"
-              >
-                Close File
-              </button>
+
+              {/* Segregated Sub-Navigation Tabs (Apple-style pill row) */}
+              <div className="flex items-center gap-1.5 overflow-x-auto pt-3 border-t border-hairline scrollbar-none">
+                {[
+                  { id: 'records', label: 'Clinical Records', icon: FileText },
+                  { id: 'overview', label: 'Medical Profile', icon: User },
+                  { id: 'medications', label: 'Prescriptions', icon: Pill },
+                  { id: 'clinical', label: 'Notes & Labs', icon: ClipboardList },
+                  { id: 'timeline', label: 'Timeline & Chat', icon: History }
+                ].map(tab => {
+                  const Icon = tab.icon;
+                  const isActive = patientSubTab === tab.id;
+                  return (
+                    <button
+                      key={tab.id}
+                      onClick={() => setPatientSubTab(tab.id)}
+                      className={`px-3.5 py-2 rounded-full text-xs font-semibold flex items-center gap-1.5 whitespace-nowrap transition-all cursor-pointer ${
+                        isActive
+                          ? 'bg-primary text-canvas shadow-xs'
+                          : 'bg-canvas-parchment text-ink-muted-80 hover:text-ink hover:bg-divider-soft border border-hairline'
+                      }`}
+                    >
+                      <Icon size={13} />
+                      {tab.label}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
 
-            {/* Direct attention line toggler */}
-            {selectedPatient && (
-              <div 
-                className="bg-canvas border border-hairline p-4 flex items-center justify-between"
-                style={{ borderRadius: '18px' }}
-              >
-                <div>
-                  <h4 className="text-sm font-semibold text-ink flex items-center gap-1.5">
-                    <PhoneCall size={14} className="text-primary" /> Requires Attention Toggle
-                  </h4>
-                  <p className="text-xs text-ink-muted-48 mt-1 leading-relaxed">Unlocks direct call channel coordinates on the Patient PWA.</p>
-                </div>
-                <input
-                  type="checkbox"
-                  checked={Boolean(activeEpisode?.requiresAttention)}
-                  onChange={(e) => handleToggleAttention(e.target.checked)}
-                  className="w-5 h-5 accent-primary cursor-pointer border-hairline"
+            {/* ================= SUB-TAB 1: CLINICAL RECORDS & FILES ================= */}
+            {patientSubTab === 'records' && (
+              <div className="space-y-4">
+                <PatientDocumentsPanel
+                  patient={selectedPatient}
+                  activeEpisode={activeEpisode}
+                  doctorUser={user}
                 />
               </div>
             )}
 
-            {/* Active Episode Details */}
-            {activeEpisode ? (
-              <div className="space-y-6">
-                
-                {/* Ward and Bed position */}
-                <div 
-                  className="bg-canvas border border-hairline p-4"
-                  style={{ borderRadius: '18px' }}
-                >
-                  <span className="text-xs text-ink-muted-48 uppercase font-semibold">Hospital Bed Position</span>
-                  <div className="text-sm font-semibold text-ink mt-1">
-                    {activeEpisode.bedAssignment?.bedId 
-                      ? `Admitted: Location ${activeEpisode.bedAssignment.bedId} (Active)`
-                      : 'Outpatient Status (No bed assigned)'}
+            {/* ================= SUB-TAB 2: MEDICAL PROFILE & HISTORY ================= */}
+            {patientSubTab === 'overview' && (
+              <div className="space-y-4">
+                {/* Critical Allergies & Medical History */}
+                <div className="bg-canvas border border-hairline p-5 space-y-4" style={{ borderRadius: '18px' }}>
+                  <h3 className="text-xs text-ink-muted-48 tracking-widest uppercase border-b border-hairline pb-2.5 font-bold font-sans flex items-center gap-1.5">
+                    <ShieldAlert size={14} className="text-amber-600" /> Allergies & Critical Clinical Alerts
+                  </h3>
+                  
+                  <div>
+                    <span className="text-[11px] text-ink-muted-48 uppercase font-bold block mb-1.5">Documented Allergies</span>
+                    {selectedPatient.allergies && selectedPatient.allergies.length > 0 ? (
+                      <div className="flex flex-wrap gap-2">
+                        {selectedPatient.allergies.map((allg, i) => (
+                          <span key={i} className="bg-rose-50 border border-rose-200 text-rose-700 text-xs font-bold px-3 py-1 rounded-full flex items-center gap-1">
+                            ⚠️ {allg}
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-ink-muted-48 italic">No drug or food allergies recorded.</p>
+                    )}
+                  </div>
+
+                  <div className="border-t border-hairline pt-3">
+                    <span className="text-[11px] text-ink-muted-48 uppercase font-bold block mb-1.5">Past Medical History</span>
+                    {selectedPatient.medicalHistory && selectedPatient.medicalHistory.length > 0 ? (
+                      <div className="flex flex-wrap gap-2">
+                        {selectedPatient.medicalHistory.map((hist, i) => (
+                          <span key={i} className="bg-canvas-parchment border border-hairline text-ink text-xs font-medium px-3 py-1 rounded-full">
+                            • {hist}
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-ink-muted-48 italic">No significant prior medical history logged.</p>
+                    )}
                   </div>
                 </div>
 
-                {/* Consultation & Diagnoses History */}
-                <div 
-                  className="bg-canvas border border-hairline p-5"
-                  style={{ borderRadius: '18px' }}
-                >
-                  <h3 className="text-xs text-ink-muted-48 tracking-widest uppercase border-b border-hairline pb-3 mb-4 font-semibold">
-                    Assessments & Diagnosis logs
+                {/* Patient Demographics & Contact */}
+                <div className="bg-canvas border border-hairline p-5 space-y-4" style={{ borderRadius: '18px' }}>
+                  <h3 className="text-xs text-ink-muted-48 tracking-widest uppercase border-b border-hairline pb-2.5 font-bold font-sans flex items-center gap-1.5">
+                    <User size={14} className="text-primary" /> Patient Demographics & Identity
+                  </h3>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                    <div className="p-3 bg-canvas-parchment border border-hairline rounded-xl">
+                      <span className="text-[10px] text-ink-muted-48 uppercase font-bold block">Full Name</span>
+                      <strong className="text-ink text-sm">{selectedPatient.fullName || selectedPatient.name}</strong>
+                    </div>
+
+                    <div className="p-3 bg-canvas-parchment border border-hairline rounded-xl">
+                      <span className="text-[10px] text-ink-muted-48 uppercase font-bold block">Patient ID</span>
+                      <strong className="text-ink font-mono">{selectedPatient.patientId}</strong>
+                    </div>
+
+                    <div className="p-3 bg-canvas-parchment border border-hairline rounded-xl">
+                      <span className="text-[10px] text-ink-muted-48 uppercase font-bold block">National UID (Aadhaar)</span>
+                      <strong className="text-primary font-mono">{selectedPatient.aadhaarNumber ? selectedPatient.aadhaarNumber.replace(/(\d{4})(\d{4})(\d{4})/, '$1 $2 $3') : 'Not registered'}</strong>
+                    </div>
+
+                    <div className="p-3 bg-canvas-parchment border border-hairline rounded-xl">
+                      <span className="text-[10px] text-ink-muted-48 uppercase font-bold block">Date of Birth & Age</span>
+                      <strong className="text-ink">{selectedPatient.dateOfBirth || selectedPatient.dob} ({selectedPatient.age} Years • {selectedPatient.gender})</strong>
+                    </div>
+
+                    <div className="p-3 bg-canvas-parchment border border-hairline rounded-xl">
+                      <span className="text-[10px] text-ink-muted-48 uppercase font-bold block">Registered Mobile</span>
+                      <a href={`tel:${selectedPatient.phone}`} className="text-primary font-semibold hover:underline font-mono">
+                        {selectedPatient.phone}
+                      </a>
+                    </div>
+
+                    <div className="p-3 bg-canvas-parchment border border-hairline rounded-xl">
+                      <span className="text-[10px] text-ink-muted-48 uppercase font-bold block">Blood Group</span>
+                      <strong className="text-ink font-bold text-sm">{selectedPatient.bloodGroup}</strong>
+                    </div>
+
+                    <div className="p-3 bg-canvas-parchment border border-hairline rounded-xl col-span-1 sm:col-span-2">
+                      <span className="text-[10px] text-ink-muted-48 uppercase font-bold block">Residential Address</span>
+                      <span className="text-ink">{selectedPatient.address || 'Address not registered'}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Emergency Contact */}
+                <div className="bg-canvas border border-hairline p-5 space-y-3" style={{ borderRadius: '18px' }}>
+                  <h3 className="text-xs text-ink-muted-48 tracking-widest uppercase border-b border-hairline pb-2.5 font-bold font-sans flex items-center gap-1.5">
+                    <PhoneCall size={14} className="text-primary" /> Emergency Contact
                   </h3>
                   
-                  {activeEpisode.consultations.length === 0 ? (
-                    <p className="text-xs text-ink-muted-48 italic py-2">No diagnosis reports recorded for this episode.</p>
+                  {selectedPatient.emergencyContact?.name ? (
+                    <div className="flex items-center justify-between p-3.5 bg-canvas-parchment border border-hairline rounded-xl text-xs">
+                      <div>
+                        <strong className="text-ink block text-sm">{selectedPatient.emergencyContact.name}</strong>
+                        <span className="text-ink-muted-48 text-[11px]">Relation: {selectedPatient.emergencyContact.relation || 'Emergency Contact'}</span>
+                      </div>
+                      <a 
+                        href={`tel:${selectedPatient.emergencyContact.phone}`}
+                        className="bg-primary text-canvas px-3.5 py-1.5 rounded-full font-semibold hover:bg-primary-focus transition-colors"
+                      >
+                        Call: {selectedPatient.emergencyContact.phone}
+                      </a>
+                    </div>
                   ) : (
-                    <div className="space-y-3 mb-4">
-                      {activeEpisode.consultations.map((c, i) => (
-                        <div key={i} className="text-xs border-b border-hairline pb-2.5 last:border-b-0">
-                          <div className="font-semibold text-ink">Diagnosis: {c.diagnosis}</div>
-                          <div className="text-ink-muted-80 mt-1">Notes: {c.notes}</div>
-                          <div className="text-[9px] text-ink-muted-48 mt-1">
-                            Logged: {new Date(c.date).toLocaleString()}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
+                    <p className="text-xs text-ink-muted-48 italic">No emergency contact provided.</p>
                   )}
-
-                  {/* Add Consultation inline form */}
-                  <form onSubmit={handleAddConsultation} className="border-t border-hairline pt-4 space-y-3">
-                    <span className="text-xs text-ink block font-semibold uppercase">Add Assessment Log</span>
-                    <div>
-                      <input 
-                        type="text" required placeholder="Diagnosis Label (e.g. Unstable Angina)"
-                        value={consForm.diagnosis} onChange={e => setConsForm({ ...consForm, diagnosis: e.target.value })}
-                        className="w-full text-xs rounded-full bg-canvas-parchment"
-                      />
-                    </div>
-                    <div>
-                      <textarea 
-                        required placeholder="Clinical assessment notes..."
-                        value={consForm.notes} onChange={e => setConsForm({ ...consForm, notes: e.target.value })}
-                        className="w-full text-xs h-16 rounded-[11px] bg-canvas-parchment"
-                      />
-                    </div>
-                    <button
-                      type="submit" disabled={addingCons}
-                      className="w-full bg-ink hover:bg-ink-muted-80 text-canvas text-xs font-semibold py-2.5 rounded-full transition-colors uppercase cursor-pointer"
-                    >
-                      {addingCons ? 'Saving...' : 'Log Assessment Entry'}
-                    </button>
-                  </form>
-                 </div>
-
-                {/* Manual Prescription Entry Form */}
-                <div 
-                  className="bg-canvas border border-hairline p-5"
-                  style={{ borderRadius: '18px' }}
-                >
-                  <h3 className="text-xs text-ink-muted-48 tracking-widest uppercase border-b border-hairline pb-3 mb-4 font-semibold">
-                    Write Clinical Prescription
-                  </h3>
-                  <form 
-                    onSubmit={async (e) => {
-                      e.preventDefault();
-                      if (!rxForm.medicine.trim() || !rxForm.dosage.trim()) return;
-                      try {
-                        const updated = await api.put(`/episodes/${activeEpisode.episodeId}`, {
-                          prescription: {
-                            medicine: rxForm.medicine,
-                            dosage: rxForm.dosage,
-                            frequency: rxForm.frequency,
-                            duration: rxForm.duration,
-                            instructions: rxForm.instructions,
-                            notes: rxForm.notes
-                          }
-                        });
-                        setActiveEpisode(updated);
-                        setRxForm({ medicine: '', dosage: '', frequency: '1-0-1', duration: '5 days', instructions: '', notes: '' });
-                        addToast('Prescription committed to database successfully!', 'success');
-                        refreshData();
-                      } catch (err) {
-                        addToast(err.message, 'error');
-                      }
-                    }}
-                    className="space-y-3"
-                  >
-                    <div className="grid grid-cols-2 gap-2">
-                      <input 
-                        type="text" placeholder="Medicine (e.g. Amoxicillin 500mg)" required
-                        value={rxForm.medicine} onChange={e => setRxForm({ ...rxForm, medicine: e.target.value })}
-                        className="text-xs rounded-full bg-canvas-parchment px-3 py-2 col-span-2 border border-hairline"
-                        style={{ borderRadius: '20px' }}
-                      />
-                      <input 
-                        type="text" placeholder="Dosage (e.g. 500 mg)" required
-                        value={rxForm.dosage} onChange={e => setRxForm({ ...rxForm, dosage: e.target.value })}
-                        className="text-xs rounded-full bg-canvas-parchment px-3 py-2 border border-hairline"
-                        style={{ borderRadius: '20px' }}
-                      />
-                      <input 
-                        type="text" placeholder="Frequency (e.g. 1-0-1)" required
-                        value={rxForm.frequency} onChange={e => setRxForm({ ...rxForm, frequency: e.target.value })}
-                        className="text-xs rounded-full bg-canvas-parchment px-3 py-2 border border-hairline"
-                        style={{ borderRadius: '20px' }}
-                      />
-                      <input 
-                        type="text" placeholder="Duration (e.g. 5 days)" required
-                        value={rxForm.duration} onChange={e => setRxForm({ ...rxForm, duration: e.target.value })}
-                        className="text-xs rounded-full bg-canvas-parchment px-3 py-2 border border-hairline"
-                        style={{ borderRadius: '20px' }}
-                      />
-                      <input 
-                        type="text" placeholder="Instructions (e.g. Post Meal)"
-                        value={rxForm.instructions} onChange={e => setRxForm({ ...rxForm, instructions: e.target.value })}
-                        className="text-xs rounded-full bg-canvas-parchment px-3 py-2 border border-hairline col-span-2"
-                        style={{ borderRadius: '20px' }}
-                      />
-                    </div>
-                    <button
-                      type="submit"
-                      className="w-full bg-primary hover:bg-primary-focus text-canvas text-xs font-semibold py-2.5 rounded-full transition-colors uppercase cursor-pointer"
-                      style={{ borderRadius: '20px' }}
-                    >
-                      Commit Prescription
-                    </button>
-                  </form>
                 </div>
 
-                {/* Prescription Digitizer Toggle trigger */}
-                <div className="space-y-4">
-                  <div 
-                    className="flex justify-between items-center bg-canvas border border-hairline p-4"
-                    style={{ borderRadius: '18px' }}
-                  >
+                {/* Hospital Bed & Ward Placement */}
+                <div className="bg-canvas border border-hairline p-5 space-y-3" style={{ borderRadius: '18px' }}>
+                  <span className="text-xs text-ink-muted-48 uppercase font-bold block">Hospital Care & Bed Placement</span>
+                  <div className="text-sm font-semibold text-ink">
+                    {activeEpisode?.bedAssignment?.bedId 
+                      ? `Inpatient Admitted: Location ${activeEpisode.bedAssignment.bedId} (Ward: ${activeEpisode.bedAssignment.wardName || 'Assigned'})`
+                      : 'Outpatient Care (No bed assigned)'}
+                  </div>
+                  <div className="text-xs text-ink-muted-48">
+                    Attending Physician: <strong className="text-ink">{selectedPatient.assignedDoctor?.name || user?.name || 'Dr. Assigned'}</strong>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ================= SUB-TAB 3: MEDICATIONS & PRESCRIPTIONS ================= */}
+            {patientSubTab === 'medications' && (
+              <div className="space-y-5">
+                {/* Active Episode Check */}
+                {!activeEpisode && (
+                  <div className="bg-primary/5 border border-primary/20 p-4 rounded-2xl flex items-center justify-between text-xs">
                     <div>
-                      <h4 className="text-sm font-semibold text-ink flex items-center gap-1.5">
-                        <FileText size={14} className="text-primary" /> Digitizer OCR Transcription
-                      </h4>
-                      <p className="text-xs text-ink-muted-48 mt-1">Digitize handwritten notes to automatically log medicines.</p>
+                      <strong className="text-ink block">Initialize Treatment Episode</strong>
+                      <span className="text-ink-muted-48">Activate clinical episode to begin prescribing medications.</span>
                     </div>
                     <button
-                      onClick={() => setShowDigitizer(!showDigitizer)}
-                      className="text-xs bg-ink text-canvas px-3.5 py-1.5 rounded-full hover:bg-ink-muted-80 uppercase cursor-pointer font-semibold"
+                      onClick={() => handleToggleAttention(false)}
+                      className="bg-primary text-canvas px-4 py-2 rounded-full font-semibold cursor-pointer hover:bg-primary-focus"
                     >
-                      {showDigitizer ? 'Close' : 'Digitize'}
+                      Start Episode
                     </button>
                   </div>
-                  
-                  {showDigitizer && (
-                    <PrescriptionDigitizer 
-                      episodeId={activeEpisode.episodeId} 
-                      onDigitized={async () => {
-                        setShowDigitizer(false);
-                        const eps = await api.get(`/episodes?patientId=${selectedPatient.patientId}`);
-                        setActiveEpisode(eps.find(e => e.status === 'ACTIVE') || null);
-                      }}
-                    />
-                  )}
-                </div>
+                )}
 
-                {/* Prescriptions cabinet */}
-                <div 
-                  className="bg-canvas border border-hairline p-5"
-                  style={{ borderRadius: '18px' }}
-                >
-                  <h3 className="text-xs text-ink-muted-48 tracking-widest uppercase border-b border-hairline pb-3 mb-4 font-semibold">
-                    Current Active Medications Cabinet
+                {/* Medications Cabinet */}
+                <div className="bg-canvas border border-hairline p-5" style={{ borderRadius: '18px' }}>
+                  <h3 className="text-xs text-ink-muted-48 tracking-widest uppercase border-b border-hairline pb-3 mb-4 font-bold flex items-center gap-1.5">
+                    <Pill size={14} className="text-primary" /> Current Active Medications Cabinet
                   </h3>
-                  {activeEpisode.prescriptions.length === 0 ? (
-                    <p className="text-xs text-ink-muted-48 italic py-2">No active prescriptions registered.</p>
+                  
+                  {(!activeEpisode || activeEpisode.prescriptions.length === 0) ? (
+                    <p className="text-xs text-ink-muted-48 italic py-2">No active prescriptions registered for this patient.</p>
                   ) : (
                     <div className="space-y-3">
                       {activeEpisode.prescriptions.map((p, i) => (
-                        <div key={i} className="bg-canvas-parchment border border-hairline rounded-[11px] p-3 text-xs">
-                          <div className="font-semibold text-ink text-sm">{p.medicine}</div>
-                          <div className="grid grid-cols-3 gap-2 mt-2 font-mono text-[11px]">
+                        <div key={i} className="bg-canvas-parchment border border-hairline rounded-[14px] p-3.5 text-xs">
+                          <div className="flex justify-between items-start">
+                            <div className="font-semibold text-ink text-sm">{p.medicine}</div>
+                            <span className="text-[10px] bg-primary/10 text-primary border border-primary/20 px-2 py-0.5 rounded-full font-semibold">
+                              {p.dosage}
+                            </span>
+                          </div>
+                          <div className="grid grid-cols-3 gap-2 mt-2 font-mono text-[11px] text-ink-muted-80">
                             <div>Dosage: <strong className="text-ink">{p.dosage}</strong></div>
                             <div>Freq: <strong className="text-ink">{p.frequency}</strong></div>
                             <div>Duration: <strong className="text-ink">{p.duration}</strong></div>
                           </div>
+                          {p.instructions && (
+                            <div className="text-[11px] text-ink-muted-48 mt-1.5 font-sans">
+                              Instructions: {p.instructions}
+                            </div>
+                          )}
                           {p.originalImagePath && (
-                            <div className="text-[9px] text-[#1f8a65] font-semibold mt-3">
+                            <div className="text-[9px] text-[#1f8a65] font-semibold mt-2.5">
                               ✓ TRANSCRIPTION DIGITIZED VIA TENSORFLOW OCR
                             </div>
                           )}
@@ -1017,16 +1046,189 @@ export default function DoctorDashboard() {
                   )}
                 </div>
 
-                {/* Investigations request */}
-                <div 
-                  className="bg-canvas border border-hairline p-5"
-                  style={{ borderRadius: '18px' }}
-                >
-                  <h3 className="text-xs text-ink-muted-48 tracking-widest uppercase border-b border-hairline pb-3 mb-4 font-semibold">
-                    Lab Investigations & Diagnostics
+                {/* Prescription Digitizer Toggle trigger */}
+                {activeEpisode && (
+                  <div className="space-y-4">
+                    <div className="flex justify-between items-center bg-canvas border border-hairline p-4" style={{ borderRadius: '18px' }}>
+                      <div>
+                        <h4 className="text-sm font-semibold text-ink flex items-center gap-1.5">
+                          <FileText size={14} className="text-primary" /> Digitizer OCR Transcription
+                        </h4>
+                        <p className="text-xs text-ink-muted-48 mt-0.5">Digitize handwritten doctor slips to automatically log medicines.</p>
+                      </div>
+                      <button
+                        onClick={() => setShowDigitizer(!showDigitizer)}
+                        className="text-xs bg-ink text-canvas px-3.5 py-1.5 rounded-full hover:bg-ink-muted-80 uppercase cursor-pointer font-semibold"
+                      >
+                        {showDigitizer ? 'Close' : 'Digitize'}
+                      </button>
+                    </div>
+                    
+                    {showDigitizer && (
+                      <PrescriptionDigitizer 
+                        episodeId={activeEpisode.episodeId} 
+                        onDigitized={async () => {
+                          setShowDigitizer(false);
+                          const eps = await api.get(`/episodes?patientId=${selectedPatient.patientId}`);
+                          setActiveEpisode(eps.find(e => e.status === 'ACTIVE') || null);
+                        }}
+                      />
+                    )}
+                  </div>
+                )}
+
+                {/* Write Clinical Prescription Form */}
+                {activeEpisode && (
+                  <div className="bg-canvas border border-hairline p-5" style={{ borderRadius: '18px' }}>
+                    <h3 className="text-xs text-ink-muted-48 tracking-widest uppercase border-b border-hairline pb-3 mb-4 font-bold">
+                      Write Clinical Prescription
+                    </h3>
+                    <form 
+                      onSubmit={async (e) => {
+                        e.preventDefault();
+                        if (!rxForm.medicine.trim() || !rxForm.dosage.trim()) return;
+                        try {
+                          const updated = await api.put(`/episodes/${activeEpisode.episodeId}`, {
+                            prescription: {
+                              medicine: rxForm.medicine,
+                              dosage: rxForm.dosage,
+                              frequency: rxForm.frequency,
+                              duration: rxForm.duration,
+                              instructions: rxForm.instructions,
+                              notes: rxForm.notes
+                            }
+                          });
+                          setActiveEpisode(updated);
+                          setRxForm({ medicine: '', dosage: '', frequency: '1-0-1', duration: '5 days', instructions: '', notes: '' });
+                          addToast('Prescription committed to database successfully!', 'success');
+                          refreshData();
+                        } catch (err) {
+                          addToast(err.message, 'error');
+                        }
+                      }}
+                      className="space-y-3"
+                    >
+                      <div className="grid grid-cols-2 gap-2">
+                        <input 
+                          type="text" placeholder="Medicine (e.g. Amoxicillin 500mg)" required
+                          value={rxForm.medicine} onChange={e => setRxForm({ ...rxForm, medicine: e.target.value })}
+                          className="text-xs rounded-full bg-canvas-parchment px-3 py-2.5 col-span-2 border border-hairline"
+                          style={{ borderRadius: '20px' }}
+                        />
+                        <input 
+                          type="text" placeholder="Dosage (e.g. 500 mg)" required
+                          value={rxForm.dosage} onChange={e => setRxForm({ ...rxForm, dosage: e.target.value })}
+                          className="text-xs rounded-full bg-canvas-parchment px-3 py-2.5 border border-hairline"
+                          style={{ borderRadius: '20px' }}
+                        />
+                        <input 
+                          type="text" placeholder="Frequency (e.g. 1-0-1)" required
+                          value={rxForm.frequency} onChange={e => setRxForm({ ...rxForm, frequency: e.target.value })}
+                          className="text-xs rounded-full bg-canvas-parchment px-3 py-2.5 border border-hairline"
+                          style={{ borderRadius: '20px' }}
+                        />
+                        <input 
+                          type="text" placeholder="Duration (e.g. 5 days)" required
+                          value={rxForm.duration} onChange={e => setRxForm({ ...rxForm, duration: e.target.value })}
+                          className="text-xs rounded-full bg-canvas-parchment px-3 py-2.5 border border-hairline"
+                          style={{ borderRadius: '20px' }}
+                        />
+                        <input 
+                          type="text" placeholder="Instructions (e.g. Post Meal)"
+                          value={rxForm.instructions} onChange={e => setRxForm({ ...rxForm, instructions: e.target.value })}
+                          className="text-xs rounded-full bg-canvas-parchment px-3 py-2.5 border border-hairline col-span-2"
+                          style={{ borderRadius: '20px' }}
+                        />
+                      </div>
+                      <button
+                        type="submit"
+                        className="w-full bg-primary hover:bg-primary-focus text-canvas text-xs font-semibold py-3 rounded-full transition-colors uppercase cursor-pointer"
+                        style={{ borderRadius: '20px' }}
+                      >
+                        Commit Prescription
+                      </button>
+                    </form>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ================= SUB-TAB 4: CLINICAL NOTES & DIAGNOSTICS ================= */}
+            {patientSubTab === 'clinical' && (
+              <div className="space-y-5">
+                {/* Direct attention line toggler */}
+                <div className="bg-canvas border border-hairline p-4 flex items-center justify-between" style={{ borderRadius: '18px' }}>
+                  <div>
+                    <h4 className="text-sm font-semibold text-ink flex items-center gap-1.5">
+                      <PhoneCall size={14} className="text-primary" /> Requires Attention Direct Call Line
+                    </h4>
+                    <p className="text-xs text-ink-muted-48 mt-0.5 leading-relaxed">Unlocks priority call channel coordinates on the Patient PWA.</p>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={Boolean(activeEpisode?.requiresAttention)}
+                    onChange={(e) => handleToggleAttention(e.target.checked)}
+                    className="w-5 h-5 accent-primary cursor-pointer border-hairline"
+                  />
+                </div>
+
+                {/* Consultation & Diagnoses History */}
+                <div className="bg-canvas border border-hairline p-5" style={{ borderRadius: '18px' }}>
+                  <h3 className="text-xs text-ink-muted-48 tracking-widest uppercase border-b border-hairline pb-3 mb-4 font-bold flex items-center gap-1.5">
+                    <ClipboardList size={14} className="text-primary" /> Assessments & Clinical Diagnosis Logs
                   </h3>
                   
-                  {activeEpisode.tests.length === 0 ? (
+                  {(!activeEpisode || activeEpisode.consultations.length === 0) ? (
+                    <p className="text-xs text-ink-muted-48 italic py-2">No diagnosis reports recorded for this episode.</p>
+                  ) : (
+                    <div className="space-y-3 mb-4">
+                      {activeEpisode.consultations.map((c, i) => (
+                        <div key={i} className="text-xs border-b border-hairline pb-2.5 last:border-b-0">
+                          <div className="font-semibold text-ink text-sm">Diagnosis: {c.diagnosis}</div>
+                          <div className="text-ink-muted-80 mt-1">Notes: {c.notes}</div>
+                          <div className="text-[10px] text-ink-muted-48 mt-1 font-mono">
+                            Logged: {new Date(c.date).toLocaleString()}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Add Consultation inline form */}
+                  {activeEpisode && (
+                    <form onSubmit={handleAddConsultation} className="border-t border-hairline pt-4 space-y-3">
+                      <span className="text-xs text-ink block font-semibold uppercase">Add Assessment Entry</span>
+                      <div>
+                        <input 
+                          type="text" required placeholder="Diagnosis Label (e.g. Unstable Angina)"
+                          value={consForm.diagnosis} onChange={e => setConsForm({ ...consForm, diagnosis: e.target.value })}
+                          className="w-full text-xs rounded-full bg-canvas-parchment px-4 py-2.5 border border-hairline"
+                        />
+                      </div>
+                      <div>
+                        <textarea 
+                          required placeholder="Clinical assessment notes..."
+                          value={consForm.notes} onChange={e => setConsForm({ ...consForm, notes: e.target.value })}
+                          className="w-full text-xs h-20 rounded-[14px] bg-canvas-parchment p-3 border border-hairline"
+                        />
+                      </div>
+                      <button
+                        type="submit" disabled={addingCons}
+                        className="w-full bg-ink hover:bg-ink-muted-80 text-canvas text-xs font-semibold py-2.5 rounded-full transition-colors uppercase cursor-pointer"
+                      >
+                        {addingCons ? 'Saving...' : 'Log Assessment Entry'}
+                      </button>
+                    </form>
+                  )}
+                </div>
+
+                {/* Investigations request */}
+                <div className="bg-canvas border border-hairline p-5" style={{ borderRadius: '18px' }}>
+                  <h3 className="text-xs text-ink-muted-48 tracking-widest uppercase border-b border-hairline pb-3 mb-4 font-bold flex items-center gap-1.5">
+                    <Activity size={14} className="text-primary" /> Lab Investigations & Diagnostics
+                  </h3>
+                  
+                  {(!activeEpisode || activeEpisode.tests.length === 0) ? (
                     <p className="text-xs text-ink-muted-48 italic py-2">No diagnostic test reports ordered.</p>
                   ) : (
                     <div className="space-y-2 mb-4 text-xs">
@@ -1036,8 +1238,8 @@ export default function DoctorDashboard() {
                             <span className="font-semibold text-ink">{tItem.name}</span>
                             {tItem.result && <span className="block text-[11px] text-ink-muted-85 mt-1 leading-relaxed font-mono">Result: {tItem.result}</span>}
                           </div>
-                          <span className={`text-[9px] uppercase font-bold px-2 py-0.5 rounded-full ${
-                            tItem.status === 'COMPLETED' ? 'bg-green-100 text-[#1f8a65]' : 'bg-yellow-100 text-timeline-done'
+                          <span className={`text-[9px] uppercase font-bold px-2.5 py-0.5 rounded-full ${
+                            tItem.status === 'COMPLETED' ? 'bg-green-100 text-[#1f8a65]' : 'bg-yellow-100 text-amber-700'
                           }`}>
                             {tItem.status}
                           </span>
@@ -1046,83 +1248,79 @@ export default function DoctorDashboard() {
                     </div>
                   )}
 
-                  <form onSubmit={handleAddTest} className="border-t border-hairline pt-4 flex gap-2">
-                    <input 
-                      type="text" required placeholder="Lab Test Name (e.g. Lipase Test)"
-                      value={testName} onChange={e => setTestName(e.target.value)}
-                      className="flex-grow text-xs rounded-full bg-canvas-parchment"
-                    />
-                    <button
-                      type="submit"
-                      className="bg-ink hover:bg-ink-muted-80 text-canvas text-xs font-semibold px-4 rounded-full transition-colors uppercase cursor-pointer"
-                    >
-                      Order
-                    </button>
-                  </form>
+                  {activeEpisode && (
+                    <form onSubmit={handleAddTest} className="border-t border-hairline pt-4 flex gap-2">
+                      <input 
+                        type="text" required placeholder="Lab Test Name (e.g. Lipase Test, Lipid Profile)"
+                        value={testName} onChange={e => setTestName(e.target.value)}
+                        className="flex-grow text-xs rounded-full bg-canvas-parchment px-4 py-2.5 border border-hairline"
+                      />
+                      <button
+                        type="submit"
+                        className="bg-ink hover:bg-ink-muted-80 text-canvas text-xs font-semibold px-5 rounded-full transition-colors uppercase cursor-pointer shrink-0"
+                      >
+                        Order Test
+                      </button>
+                    </form>
+                  )}
                 </div>
+              </div>
+            )}
 
-                {/* Clinical Records & Local Object Storage Archive */}
-                <PatientDocumentsPanel
-                  patient={selectedPatient}
-                  activeEpisode={activeEpisode}
-                  doctorUser={user}
-                />
-
+            {/* ================= SUB-TAB 5: TIMELINE & COORDINATION ================= */}
+            {patientSubTab === 'timeline' && (
+              <div className="space-y-5">
                 {/* Chat communications */}
-                <div 
-                  className="bg-canvas border border-hairline p-5"
-                  style={{ borderRadius: '18px' }}
-                >
-                  <h3 className="text-xs text-ink-muted-48 tracking-widest uppercase border-b border-hairline pb-3 mb-4 font-semibold">
-                    Episode Chat Coordinator
-                  </h3>
-                  
-                  <div className="space-y-2 max-h-48 overflow-y-auto mb-4 bg-canvas-parchment border border-hairline p-3 rounded-[11px]">
-                    {activeEpisode.messages.length === 0 ? (
-                      <p className="text-xs text-ink-muted-48 italic text-center py-4">No coordination messages logged.</p>
-                    ) : (
-                      activeEpisode.messages.map((m, i) => (
-                        <div 
-                          key={i} 
-                          className={`p-2.5 rounded-[11px] text-xs max-w-[85%] ${
-                            m.sender === 'DOCTOR' 
-                              ? 'bg-ink text-canvas ml-auto' 
-                              : 'bg-canvas border border-hairline text-ink mr-auto'
-                          }`}
-                        >
-                          <div>{m.text}</div>
-                          <span className="text-[9px] block text-right mt-1 opacity-70">
-                            {new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                          </span>
-                        </div>
-                      ))
-                    )}
-                  </div>
+                {activeEpisode && (
+                  <div className="bg-canvas border border-hairline p-5" style={{ borderRadius: '18px' }}>
+                    <h3 className="text-xs text-ink-muted-48 tracking-widest uppercase border-b border-hairline pb-3 mb-4 font-bold flex items-center gap-1.5">
+                      <MessageSquare size={14} className="text-primary" /> Episode Chat Coordinator
+                    </h3>
+                    
+                    <div className="space-y-2 max-h-56 overflow-y-auto mb-4 bg-canvas-parchment border border-hairline p-3 rounded-[14px]">
+                      {activeEpisode.messages.length === 0 ? (
+                        <p className="text-xs text-ink-muted-48 italic text-center py-4">No coordination messages logged.</p>
+                      ) : (
+                        activeEpisode.messages.map((m, i) => (
+                          <div 
+                            key={i} 
+                            className={`p-2.5 rounded-[12px] text-xs max-w-[85%] ${
+                              m.sender === 'DOCTOR' 
+                                ? 'bg-ink text-canvas ml-auto' 
+                                : 'bg-canvas border border-hairline text-ink mr-auto'
+                            }`}
+                          >
+                            <div>{m.text}</div>
+                            <span className="text-[9px] block text-right mt-1 opacity-70">
+                              {new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          </div>
+                        ))
+                      )}
+                    </div>
 
-                  <form onSubmit={handleSendChatMessage} className="flex gap-2">
-                    <input 
-                      type="text" required placeholder="Type coordination message..."
-                      value={chatMessage} onChange={e => setChatMessage(e.target.value)}
-                      className="flex-grow text-xs rounded-full bg-canvas-parchment"
-                    />
-                    <button
-                      type="submit"
-                      className="bg-primary hover:bg-primary-focus text-canvas text-xs font-semibold px-4 rounded-full transition-colors uppercase cursor-pointer"
-                    >
-                      Send
-                    </button>
-                  </form>
-                </div>
+                    <form onSubmit={handleSendChatMessage} className="flex gap-2">
+                      <input 
+                        type="text" required placeholder="Type coordination message..."
+                        value={chatMessage} onChange={e => setChatMessage(e.target.value)}
+                        className="flex-grow text-xs rounded-full bg-canvas-parchment px-4 py-2.5 border border-hairline"
+                      />
+                      <button
+                        type="submit"
+                        className="bg-primary hover:bg-primary-focus text-canvas text-xs font-semibold px-5 rounded-full transition-colors uppercase cursor-pointer shrink-0"
+                      >
+                        Send
+                      </button>
+                    </form>
+                  </div>
+                )}
 
                 {/* Patient Treatment Timeline */}
-                <div 
-                  className="bg-canvas border border-hairline p-5 space-y-4"
-                  style={{ borderRadius: '18px' }}
-                >
-                  <h3 className="text-xs text-ink-muted-48 tracking-widest uppercase border-b border-hairline pb-3 mb-2 font-bold font-sans">
-                    Treatment Event Timeline
+                <div className="bg-canvas border border-hairline p-5 space-y-4" style={{ borderRadius: '18px' }}>
+                  <h3 className="text-xs text-ink-muted-48 tracking-widest uppercase border-b border-hairline pb-3 mb-2 font-bold font-sans flex items-center gap-1.5">
+                    <History size={14} className="text-primary" /> Treatment Event Timeline
                   </h3>
-                  <div className="max-h-48 overflow-y-auto space-y-3.5 pr-1 text-xs">
+                  <div className="max-h-56 overflow-y-auto space-y-3.5 pr-1 text-xs">
                     {timelineLogs.map((log, i) => (
                       <div key={i} className="flex gap-2.5">
                         <span className="text-[10px] text-ink-muted-48 font-mono shrink-0 pt-0.5">
@@ -1147,27 +1345,20 @@ export default function DoctorDashboard() {
                 </div>
 
                 {/* Patient Discharge panel */}
-                <div 
-                  className="bg-canvas border border-hairline p-4 flex justify-between items-center"
-                  style={{ borderRadius: '18px' }}
-                >
-                  <div>
-                    <h4 className="text-sm font-semibold text-ink">Discharge Inpatient</h4>
-                    <p className="text-xs text-ink-muted-48 mt-1">Stops clinical communications and releases bed assignment.</p>
+                {activeEpisode && (
+                  <div className="bg-canvas border border-hairline p-4 flex justify-between items-center" style={{ borderRadius: '18px' }}>
+                    <div>
+                      <h4 className="text-sm font-semibold text-ink">Discharge Inpatient</h4>
+                      <p className="text-xs text-ink-muted-48 mt-0.5">Stops clinical communications and releases bed assignment.</p>
+                    </div>
+                    <button
+                      onClick={handleDischargePatient}
+                      className="bg-primary hover:bg-primary-focus text-canvas text-xs font-semibold py-2.5 px-4 rounded-full transition-colors uppercase cursor-pointer"
+                    >
+                      Discharge
+                    </button>
                   </div>
-                  <button
-                    onClick={handleDischargePatient}
-                    className="bg-primary hover:bg-primary-focus text-canvas text-xs font-semibold py-2.5 px-4 rounded-full transition-colors uppercase font-semibold cursor-pointer"
-                  >
-                    Discharge
-                  </button>
-                </div>
-
-              </div>
-            ) : (
-              <div className="bg-canvas border border-dashed border-hairline p-6 text-center text-ink-muted-48">
-                <AlertCircle size={20} className="text-ink-muted-48 mx-auto mb-2" />
-                <p className="text-xs">Patient does not have an active Treatment Episode. Assign a clinical consultant in the Admin Web App first.</p>
+                )}
               </div>
             )}
 

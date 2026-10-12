@@ -27,7 +27,8 @@ export async function lookupPatient(req, res, next) {
     if (!token && !patientId) {
       return res.status(400).json({ message: 'Provide either token or patientId query parameter.' });
     }
-    const patient = await patientService.lookupPatient({ token, patientId });
+    const actor = req.user || null;
+    const patient = await patientService.lookupPatient({ token, patientId }, actor);
     if (!patient) {
       return res.status(404).json({ message: 'Patient record not found.' });
     }

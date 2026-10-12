@@ -17,20 +17,49 @@ export default function QRScanner({ onPatientFound }) {
 
   const handleScanSuccess = async (decodedText) => {
     await stopScanner();
+    const cleanText = String(decodedText || '').trim();
     addToast('QR scan successful. Resolving identity...', 'success');
-    await resolvePatient(decodedText, null);
+
+    let token = cleanText;
+    let patientId = null;
+
+    if (cleanText.startsWith('http://') || cleanText.startsWith('https://')) {
+      try {
+        const parsed = new URL(cleanText);
+        token = parsed.searchParams.get('token') || parsed.searchParams.get('qr') || cleanText;
+        patientId = parsed.searchParams.get('patientId') || parsed.searchParams.get('id');
+      } catch (_) {}
+    } else if (cleanText.startsWith('{') && cleanText.endsWith('}')) {
+      try {
+        const parsed = JSON.parse(cleanText);
+        token = parsed.token || parsed.qrCodeToken || cleanText;
+        patientId = parsed.patientId || parsed.id;
+      } catch (_) {}
+    }
+
+    await resolvePatient(token, patientId);
   };
 
   const resolvePatient = async (token, patientId) => {
     try {
-      let patientData;
+      let patientData = null;
       if (token) {
-        patientData = await api.get(`/patients/lookup?token=${encodeURIComponent(token)}`);
-      } else if (patientId) {
+        try {
+          patientData = await api.get(`/patients/lookup?token=${encodeURIComponent(token)}`);
+        } catch (err) {
+          if (!patientId) throw err;
+        }
+      }
+      if (!patientData && patientId) {
         patientData = await api.get(`/patients/lookup?patientId=${encodeURIComponent(patientId)}`);
       }
-      onPatientFound(patientData);
-      addToast(`Access authorized: ${patientData.name}`, 'success');
+      const resolved = patientData?.patient || patientData;
+      if (!resolved || (!resolved.patientId && !resolved._id)) {
+        throw new Error('Patient record not found.');
+      }
+      const displayName = resolved.name || resolved.fullName || resolved.patientId;
+      onPatientFound(resolved);
+      addToast(`Access authorized & assigned: ${displayName}`, 'success');
     } catch (err) {
       addToast(err.message || 'Verification failed. Access Denied.', 'error');
     }

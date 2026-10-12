@@ -72,15 +72,63 @@ export async function getPatients() {
   return await Patient.find({}).populate('assignedDoctor');
 }
 
-export async function lookupPatient({ token, patientId }) {
+export async function lookupPatient({ token, patientId }, actor = null) {
   let patient = null;
-  if (token) {
-    patient = await Patient.findOne({ status: { $ne: 'INACTIVE' }, qrCodeToken: token }).populate('assignedDoctor');
-  } else if (patientId) {
-    const cleanId = String(patientId).trim().toUpperCase();
-    patient = await Patient.findOne({ status: { $ne: 'INACTIVE' }, patientId: cleanId }).populate('assignedDoctor');
+  const rawToken = String(token || '').trim();
+  const rawId = String(patientId || '').trim();
+
+  // 1. Try finding by qrCodeToken
+  if (rawToken) {
+    patient = await Patient.findOne({ qrCodeToken: rawToken });
+
+    // Fallback: token might actually be the patientId, Aadhaar, or phone
+    if (!patient) {
+      patient = await Patient.findOne({
+        $expr: { $eq: [{ $toUpper: '$patientId' }, rawToken.toUpperCase()] }
+      });
+    }
+
+    if (!patient && /^\d+$/.test(rawToken)) {
+      patient = await Patient.findOne({
+        $or: [
+          { aadhaarNumber: rawToken },
+          { phone: rawToken },
+          { phone: `+91${rawToken}` }
+        ]
+      });
+    }
   }
-  return patient;
+
+  // 2. If not found by token, try by patientId / name / Aadhaar
+  if (!patient && rawId) {
+    const cleanId = rawId.toUpperCase();
+    patient = await Patient.findOne({
+      $or: [
+        { $expr: { $eq: [{ $toUpper: '$patientId' }, cleanId] } },
+        { qrCodeToken: rawId },
+        { aadhaarNumber: rawId.replace(/\D/g, '') },
+        { fullName: new RegExp(`^${rawId}$`, 'i') }
+      ]
+    });
+  }
+
+  if (!patient) return null;
+
+  // 3. Auto-assign scanning doctor if requested by a DOCTOR
+  if (actor && actor.role === 'DOCTOR') {
+    const docId = actor.id || actor.sub;
+    if (docId) {
+      try {
+        await assignDoctor(patient.patientId, docId, actor.name || docId);
+        // Reload fresh patient record
+        patient = await Patient.findOne({ patientId: patient.patientId });
+      } catch (err) {
+        console.warn('[lookupPatient] Auto-assign doctor note:', err.message);
+      }
+    }
+  }
+
+  return await patient.populate('assignedDoctor');
 }
 
 export async function getPatientById(patientId) {
@@ -137,28 +185,61 @@ export async function updatePatient(patientId, updateData, actor) {
 }
 
 export async function assignDoctor(patientId, doctorId, actor) {
-  const patient = await Patient.findOne({ patientId });
+  const cleanPId = String(patientId || '').trim().toUpperCase();
+  const cleanDId = String(doctorId || '').trim().toUpperCase();
+
+  const patient = await Patient.findOne({
+    $expr: { $eq: [{ $toUpper: '$patientId' }, cleanPId] }
+  });
   if (!patient) throw new Error('Patient not found');
 
-  const doctor = await Doctor.findOne({ doctorId });
+  const doctor = await Doctor.findOne({
+    $expr: { $eq: [{ $toUpper: '$doctorId' }, cleanDId] }
+  });
   if (!doctor) throw new Error('Doctor not found');
 
   patient.assignedDoctor = doctor._id;
+  if (patient.status === 'INACTIVE') {
+    patient.status = 'ACTIVE';
+  }
   await patient.save();
 
-  // Update active Treatment Episode if one exists
-  const activeEpisode = await TreatmentEpisode.findOne({ patientId, status: 'ACTIVE' });
+  // Update active Treatment Episode if one exists, or create a new active episode
+  let activeEpisode = await TreatmentEpisode.findOne({ patientId: patient.patientId, status: 'ACTIVE' });
   if (activeEpisode) {
     activeEpisode.doctorId = doctor.doctorId;
     activeEpisode.doctorName = doctor.name;
+    if (doctor.phone) activeEpisode.doctorPhone = doctor.phone;
     await activeEpisode.save();
+  } else {
+    const count = await TreatmentEpisode.countDocuments();
+    const episodeId = `EP-${new Date().getFullYear()}-${String(count + 10001).padStart(5, '0')}`;
+    activeEpisode = await TreatmentEpisode.create({
+      episodeId,
+      patientId: patient.patientId,
+      patientName: patient.fullName || patient.name || 'Patient',
+      doctorId: doctor.doctorId,
+      doctorName: doctor.name,
+      doctorPhone: doctor.phone || '',
+      department: doctor.department || patient.department || 'General Medicine',
+      currentStage: 'CONSULTATION',
+      reason: 'Auto-assigned on Doctor QR Scan',
+      admissionDate: new Date().toISOString(),
+      status: 'ACTIVE',
+      requiresAttention: false,
+      consultations: [],
+      prescriptions: [],
+      tests: [],
+      surgeries: [],
+      messages: []
+    });
   }
 
   await logAction({
-    actor: actor || 'admin',
-    action: 'Doctor Assigned',
+    actor: actor || doctor.name || doctor.doctorId || 'admin',
+    action: `Doctor Assigned: ${doctor.name}`,
     entityType: 'Patient',
-    entityId: patientId,
+    entityId: patient.patientId,
     metadata: { doctorId: doctor.doctorId, doctorName: doctor.name }
   });
 

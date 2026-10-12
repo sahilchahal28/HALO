@@ -501,8 +501,14 @@ export function AppProvider({ children }) {
         setSurgeries(await api.get('/surgeries'));
         setDonorsList(await api.get('/bloodbank/donors-list'));
       } else if (user.role === 'DOCTOR') {
-        setDoctorNotifications(await api.get(`/notifications/${user.id}`));
-        setDoctors(await api.get('/doctors'));
+        const [notes, dcs, pts] = await Promise.all([
+          api.get(`/notifications/${user.id}`),
+          api.get('/doctors'),
+          api.get('/patients')
+        ]);
+        setDoctorNotifications(notes || []);
+        setDoctors(dcs || []);
+        setPatients(pts || []);
       } else if (user.role === 'PATIENT' && (user.patientId || user.id)) {
         const pid = user.patientId || user.id;
         const [eps, docs, dcs] = await Promise.all([
