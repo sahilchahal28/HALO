@@ -72,7 +72,54 @@ async function ensureServerRunning() {
 }
 
 async function startTunnel(requestedSubdomain, attempt = 1) {
-  console.log(`[Tunnel] Connecting tunnel to port ${PORT}... (requesting: ${requestedSubdomain})`);
+  // 1. Try Cloudflare Tunnel if cloudflared binary is installed
+  const cloudflaredPath = '/opt/homebrew/bin/cloudflared';
+  try {
+    const fs = await import('fs');
+    if (fs.existsSync(cloudflaredPath)) {
+      console.log(`[Tunnel] Starting high-speed Cloudflare Tunnel to port ${PORT}...`);
+      const child = spawn(cloudflaredPath, ['tunnel', '--url', `http://127.0.0.1:${PORT}`]);
+      let resolvedUrl = null;
+
+      const urlPromise = new Promise((resolve) => {
+        child.stderr.on('data', (d) => {
+          const str = d.toString();
+          const match = str.match(/https:\/\/[a-z0-9-]+\.trycloudflare\.com/i);
+          if (match && !resolvedUrl) {
+            resolvedUrl = match[0];
+            resolve({
+              url: resolvedUrl,
+              close: () => child.kill()
+            });
+          }
+        });
+        child.stdout.on('data', (d) => {
+          const str = d.toString();
+          const match = str.match(/https:\/\/[a-z0-9-]+\.trycloudflare\.com/i);
+          if (match && !resolvedUrl) {
+            resolvedUrl = match[0];
+            resolve({
+              url: resolvedUrl,
+              close: () => child.kill()
+            });
+          }
+        });
+      });
+
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Cloudflare tunnel timeout')), 12000)
+      );
+
+      const tunnelObj = await Promise.race([urlPromise, timeoutPromise]);
+      console.log(`[Tunnel] Cloudflare Tunnel established: ${tunnelObj.url}`);
+      return tunnelObj;
+    }
+  } catch (cfErr) {
+    console.warn(`[Tunnel] Cloudflare tunnel unavailable (${cfErr.message}), falling back to localtunnel...`);
+  }
+
+  // 2. Fallback to localtunnel
+  console.log(`[Tunnel] Connecting localtunnel to port ${PORT}... (requesting: ${requestedSubdomain})`);
   try {
     const tunnel = await localtunnel({
       port: PORT,

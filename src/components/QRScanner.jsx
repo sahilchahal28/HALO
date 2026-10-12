@@ -80,7 +80,9 @@ export default function QRScanner({ onPatientFound }) {
       addToast(`Access authorized & assigned: ${displayName}`, 'success');
       // Keep lock active to prevent rescanning while viewing patient
     } catch (err) {
-      addToast(err.message || 'Verification failed. Access Denied.', 'error');
+      if (!err?.isTransient) {
+        addToast(err.message || 'Verification failed. Access Denied.', 'error');
+      }
       // Release lock after cooldown so user can scan again
       setTimeout(() => {
         scanLockRef.current = false;

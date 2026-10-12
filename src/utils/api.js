@@ -43,6 +43,11 @@ function isBlockedMixedContent(url) {
 function sanitizeApiBase(raw) {
   const clean = String(raw || '').trim().replace(/\/$/, '');
   if (!clean) return '';
+  // Drop dead/blocked localtunnel domains so clients fall back to active server immediately
+  if (clean.includes('loca.lt')) {
+    try { localStorage.removeItem(SERVER_URL_KEY); } catch (_) {}
+    return '';
+  }
   // Bare host/IP without a scheme (e.g. "192.168.1.15:5001") — assume http.
   const withScheme = /^https?:\/\//i.test(clean) ? clean : `http://${clean}`;
   if (isBlockedMixedContent(withScheme)) return '';
