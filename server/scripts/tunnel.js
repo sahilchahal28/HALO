@@ -11,6 +11,7 @@
  */
 import os from 'os';
 import http from 'http';
+import https from 'https';
 import { spawn } from 'child_process';
 import localtunnel from 'localtunnel';
 
@@ -88,6 +89,22 @@ async function startTunnel(requestedSubdomain, attempt = 1) {
   }
 }
 
+// Probe the PUBLIC tunnel endpoint — catches "half-dead" tunnels that accept
+// connections but can't proxy to the backend (surface as 408/503 to clients).
+function checkTunnelHealth(publicUrl) {
+  return new Promise((resolve) => {
+    const req = https.get(`${publicUrl}/health`, (res) => {
+      res.resume();
+      resolve(res.statusCode === 200);
+    });
+    req.on('error', () => resolve(false));
+    req.setTimeout(6000, () => {
+      req.destroy();
+      resolve(false);
+    });
+  });
+}
+
 async function main() {
   const lanIp = getLanIp();
   const serverProc = await ensureServerRunning();
@@ -137,6 +154,29 @@ async function main() {
   tunnel.on('error', (err) => {
     console.error('[Tunnel Error]:', err.message);
   });
+
+  // Self-healing watchdog: the tunnel can go half-dead (accepts connections
+  // but can't proxy). Probe the public URL and restart the tunnel if it fails.
+  let healthy = true;
+  setInterval(async () => {
+    try {
+      const ok = await checkTunnelHealth(tunnel.url);
+      if (!ok && healthy) {
+        healthy = false;
+        console.warn(`\n[Watchdog] Tunnel not responding (${tunnel.url}). Restarting...`);
+        try { tunnel.close(); } catch (_) {}
+        await new Promise((r) => setTimeout(r, 2500));
+        tunnel = await startTunnel(DEFAULT_SUBDOMAIN);
+        console.log(`[Watchdog] Tunnel restarted at: ${tunnel.url}`);
+        console.warn('[Watchdog] If this address changed, update vercel.json and redeploy.');
+      } else if (ok && !healthy) {
+        healthy = true;
+        console.log('[Watchdog] Tunnel health recovered.');
+      }
+    } catch (e) {
+      console.error('[Watchdog] Health check error:', e.message);
+    }
+  }, 30000);
 
   process.on('SIGINT', () => {
     console.log('\n[HALO Tunnel] Shutting down...');

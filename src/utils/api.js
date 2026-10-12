@@ -208,6 +208,25 @@ async function refreshSession() {
           if (res.status === 401) return null;
           lastError = new ApiError(`Refresh failed (${res.status})`, res.status);
         } catch (e) {
+          // Network error on a custom base — the stored URL may be dead. Drop it
+          // and retry same-origin once (keeps the session alive on reload).
+          if (attempt === 0 && base) {
+            try { localStorage.removeItem(SERVER_URL_KEY); } catch (_) {}
+            const fallbackBase = getApiBase();
+            if (fallbackBase !== base) {
+              try {
+                const res2 = await fetch(`${fallbackBase}/api/auth/refresh`, {
+                  method: 'POST',
+                  credentials: fallbackBase ? 'include' : 'same-origin',
+                });
+                if (res2.ok) {
+                  const data2 = await res2.json();
+                  if (data2.token) setToken(data2.token);
+                  return data2;
+                }
+              } catch (_) {}
+            }
+          }
           lastError = e instanceof ApiError ? e : new ApiError(e.message, undefined);
         }
       }
@@ -218,6 +237,10 @@ async function refreshSession() {
   }
   return refreshingPromise;
 }
+
+// 5xx responses from the tunnel/proxy are transient — retry with backoff.
+const TRANSIENT_STATUSES = new Set([408, 502, 503, 504]);
+const MAX_5XX_RETRIES = 2;
 
 async function rawRequest(endpoint, options = {}, isRetry = false) {
   const token = getToken();
@@ -250,6 +273,12 @@ async function rawRequest(endpoint, options = {}, isRetry = false) {
       credentials,
     });
   } catch (_) {
+    // A dead/unreachable custom base throws instead of responding. For safe
+    // endpoints (auth + GETs), drop the poisoned base and retry same-origin.
+    if (!isRetry && base && (endpoint.startsWith('/auth/') || (options.method || 'GET') === 'GET')) {
+      try { localStorage.removeItem(SERVER_URL_KEY); } catch (_) {}
+      return rawRequest(endpoint, options, true);
+    }
     throw new ApiError(
       `Network error: Unable to reach the HALO server at ${base || 'same-origin'}. Make sure the backend server is running, then check Host Server Settings (Reset Default uses the built-in connection).`,
       undefined
@@ -257,6 +286,45 @@ async function rawRequest(endpoint, options = {}, isRetry = false) {
   }
 
   if (response.status === 204) return null;
+
+  // Transient upstream failures (tunnel down/restarting) — retry with backoff.
+  if (TRANSIENT_STATUSES.has(response.status) && !isRetry) {
+    for (let attempt = 1; attempt <= MAX_5XX_RETRIES; attempt++) {
+      await new Promise(r => setTimeout(r, 700 * attempt));
+      let retryRes;
+      try {
+        retryRes = await fetch(`${base}/api${endpoint}`, {
+          ...options,
+          body,
+          headers,
+          credentials,
+        });
+      } catch (_) { continue; }
+      if (TRANSIENT_STATUSES.has(retryRes.status)) {
+        response = retryRes;
+        continue;
+      }
+      response = retryRes;
+      break;
+    }
+    // If a custom base kept failing, drop it and retry once same-origin —
+    // the stored URL may point at a dead tunnel.
+    if (TRANSIENT_STATUSES.has(response.status) && base) {
+      try { localStorage.removeItem(SERVER_URL_KEY); } catch (_) {}
+      const fallbackBase = getApiBase();
+      if (fallbackBase !== base) {
+        try {
+          const fallbackRes = await fetch(`${fallbackBase}/api${endpoint}`, {
+            ...options,
+            body,
+            headers,
+            credentials: fallbackBase ? 'include' : 'same-origin',
+          });
+          if (!TRANSIENT_STATUSES.has(fallbackRes.status)) response = fallbackRes;
+        } catch (_) {}
+      }
+    }
+  }
 
   if (response.status === 401 && !isRetry && !endpoint.startsWith('/auth/')) {
     // Access token expired → silent refresh once, then retry
