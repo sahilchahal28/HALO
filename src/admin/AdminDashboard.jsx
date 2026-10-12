@@ -69,6 +69,60 @@ function PatientDirectoryQR({ patient, onZoom }) {
   );
 }
 
+function PatientConsoleQRBlock({ patient, onZoom }) {
+  const [qrUrl, setQrUrl] = useState('');
+
+  useEffect(() => {
+    let isMounted = true;
+    const token = patient?.qrCodeToken || patient?.patientId;
+    if (token) {
+      QRCode.toDataURL(token, {
+        width: 450,
+        margin: 1,
+        color: { dark: '#000000', light: '#ffffff' },
+      })
+        .then((url) => {
+          if (isMounted) setQrUrl(url);
+        })
+        .catch((err) => console.error('Failed to generate console QR:', err));
+    }
+    return () => { isMounted = false; };
+  }, [patient?.qrCodeToken, patient?.patientId]);
+
+  return (
+    <div className="bg-canvas-parchment border-2 border-hairline p-4 rounded-2xl flex flex-col items-center text-center space-y-2 mb-4">
+      <span className="text-[10px] text-ink font-bold uppercase tracking-widest flex items-center gap-1.5">
+        <QrCode size={14} className="text-primary" /> Clinical Access QR Pass
+      </span>
+      <div
+        onClick={() => qrUrl && onZoom(qrUrl, patient)}
+        className="relative group cursor-pointer p-2.5 bg-white rounded-2xl border-2 border-hairline shadow-md hover:shadow-lg transition-all"
+        title="Click to Zoom QR Pass"
+      >
+        {qrUrl ? (
+          <img
+            src={qrUrl}
+            alt={`Patient QR - ${patient?.name}`}
+            className="w-48 h-48 sm:w-52 sm:h-52 object-contain rounded-xl transition-transform group-hover:scale-105"
+          />
+        ) : (
+          <div className="w-48 h-48 sm:w-52 sm:h-52 flex flex-col items-center justify-center bg-canvas-parchment rounded-xl animate-pulse">
+            <QrCode size={36} className="text-ink-muted-48 opacity-40 animate-spin" />
+            <span className="text-[10px] text-ink-muted-48 mt-2">Generating QR Pass...</span>
+          </div>
+        )}
+        <div className="absolute inset-0 bg-black/10 opacity-0 group-hover:opacity-100 transition-opacity rounded-2xl flex items-center justify-center">
+          <span className="bg-ink text-canvas text-xs font-bold px-3 py-1.5 rounded-full shadow-lg">🔍 Click to Zoom</span>
+        </div>
+      </div>
+      <span className="text-[11px] font-mono font-bold text-ink">{patient?.patientId}</span>
+      <span className="text-[10px] text-primary font-semibold tracking-tight">
+        📷 Scan with Doctor PWA Rear Camera to open file
+      </span>
+    </div>
+  );
+}
+
 export default function AdminDashboard() {
   const {
     logout, t, beds, setBeds, patients, setPatients, ambulanceRequests,
@@ -1264,23 +1318,25 @@ export default function AdminDashboard() {
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-4">
-                        {patientQrBlob && (
-                          <button
-                            onClick={() => setShowQrZoom(patientQrBlob)}
-                            className="flex items-center gap-2.5 bg-canvas-parchment border border-hairline hover:border-primary px-3 py-1.5 rounded-full cursor-pointer transition-all group"
-                            title="Click to Zoom QR Code"
-                          >
-                            <img
-                              src={patientQrBlob}
-                              alt="Patient Profile QR"
-                              className="w-8 h-8 border border-hairline rounded bg-white"
-                            />
-                            <span className="text-xs font-bold text-ink group-hover:text-primary flex items-center gap-1">
-                              <QrCode size={14} className="text-primary" /> Zoom QR Pass
-                            </span>
-                          </button>
-                        )}
+                      <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            const token = selectedPatient.qrCodeToken || selectedPatient.patientId;
+                            const url = await QRCode.toDataURL(token, {
+                              width: 450,
+                              margin: 1,
+                              color: { dark: '#000000', light: '#ffffff' }
+                            });
+                            setZoomPatient(selectedPatient);
+                            setShowQrZoom(url);
+                          }}
+                          className="flex items-center gap-1.5 bg-canvas-parchment hover:bg-canvas border border-hairline hover:border-primary text-ink px-3 py-2 rounded-full cursor-pointer transition-all shadow-none font-bold text-xs group"
+                          title="Click to Zoom QR Pass"
+                        >
+                          <QrCode size={14} className="text-primary" />
+                          <span className="group-hover:text-primary">Zoom QR Pass</span>
+                        </button>
 
                         <button
                           onClick={async () => {
@@ -1358,29 +1414,13 @@ export default function AdminDashboard() {
                       {/* Column 1: Demographics & Care Details */}
                       <div className="space-y-6 text-xs">
                         {/* Dedicated Prominent Patient QR Pass Block */}
-                        {patientQrBlob && (
-                          <div className="bg-canvas-parchment border-2 border-hairline p-4 rounded-2xl flex flex-col items-center text-center space-y-2">
-                            <span className="text-[10px] text-ink font-bold uppercase tracking-widest flex items-center gap-1.5">
-                              <QrCode size={14} className="text-primary" /> Clinical Access QR Pass
-                            </span>
-                            <div
-                              onClick={() => setShowQrZoom(patientQrBlob)}
-                              className="relative group cursor-pointer p-2.5 bg-white rounded-2xl border-2 border-hairline shadow-md hover:shadow-lg transition-all"
-                            >
-                              <img
-                                src={patientQrBlob}
-                                alt="Patient QR Code"
-                                className="w-52 h-52 object-contain rounded-xl transition-transform group-hover:scale-105"
-                              />
-                              <div className="absolute inset-0 bg-black/10 opacity-0 group-hover:opacity-100 transition-opacity rounded-2xl flex items-center justify-center">
-                                <span className="bg-ink text-canvas text-xs font-bold px-3 py-1.5 rounded-full shadow-lg">🔍 Click to Zoom</span>
-                              </div>
-                            </div>
-                            <span className="text-[10px] text-primary font-semibold tracking-tight">
-                              📷 Scan with Doctor PWA Rear Camera to open file
-                            </span>
-                          </div>
-                        )}
+                        <PatientConsoleQRBlock
+                          patient={selectedPatient}
+                          onZoom={(url, pt) => {
+                            setZoomPatient(pt);
+                            setShowQrZoom(url);
+                          }}
+                        />
 
                         <div>
                           <h4 className="text-xs text-ink-muted-48 uppercase font-bold tracking-widest border-b border-hairline pb-2 mb-2">Patient Demographics</h4>
