@@ -226,12 +226,23 @@ export async function directDocumentUpload({
   const documentId = `DOC-${10000 + count}`;
   const retentionPolicy = calculateRetentionPolicy(type, examinationDate);
 
-  // Upload buffer to S3 / Cloudflare R2
-  await putS3Object({
-    key: s3Key,
-    buffer: file.buffer,
-    mimeType,
-  });
+  // Use multipart upload for files >= 5MB for better reliability
+  const useMultipart = fileSize >= 5 * 1024 * 1024;
+
+  if (useMultipart) {
+    await putS3ObjectMultipart({
+      key: s3Key,
+      buffer: file.buffer,
+      mimeType,
+    });
+  } else {
+    // Upload buffer to S3 / Cloudflare R2
+    await putS3Object({
+      key: s3Key,
+      buffer: file.buffer,
+      mimeType,
+    });
+  }
 
   const document = new MedicalDocument({
     documentId,
@@ -594,16 +605,49 @@ export async function runRetentionDeletionWorker() {
         },
       });
     } catch (err) {
-      console.error(`[Retention Worker] Failed to purge doc ${doc.documentId}:`, err.message);
-      doc.status = 'DELETION_FAILED';
-      doc.deletionRetryCount += 1;
-      doc.deletionError = err.message;
-      await doc.save();
-      summary.failed += 1;
+      const isTransient = isTransientS3Error(err);
+      console.error(`[Retention Worker] Failed to purge doc ${doc.documentId}:`, {
+        error: err.message,
+        isTransient,
+        retryCount: doc.deletionRetryCount + 1,
+      });
+
+      if (isTransient && doc.deletionRetryCount < 4) {
+        // Transient error - will be retried in next cycle
+        doc.status = 'DELETION_FAILED';
+        doc.deletionRetryCount += 1;
+        doc.deletionError = `TRANSIENT: ${err.message}`;
+        await doc.save();
+        summary.failed += 1;
+      } else {
+        // Permanent error or max retries reached - alert but don't retry endlessly
+        doc.status = 'DELETION_FAILED';
+        doc.deletionRetryCount += 1;
+        doc.deletionError = `PERMANENT: ${err.message}`;
+        await doc.save();
+        summary.failed += 1;
+
+        await logAction({
+          actor: 'SYSTEM_RETENTION_WORKER',
+          action: 'Document Auto-Purge Permanent Failure',
+          entityType: 'MedicalDocument',
+          entityId: doc.documentId,
+          metadata: {
+            patientId: doc.patientId,
+            type: doc.type,
+            title: doc.title,
+            error: err.message,
+            isTransient,
+            retryCount: doc.deletionRetryCount,
+            requiresManualIntervention: true,
+          },
+        });
+      }
     }
   }
 
   // 2. Retry documents in DELETION_FAILED status (up to 5 retries)
+  // Only retry if the last error was transient
   const retryDocs = await MedicalDocument.find({
     status: 'DELETION_FAILED',
     legalHold: { $ne: true },
@@ -611,6 +655,13 @@ export async function runRetentionDeletionWorker() {
   }).limit(20);
 
   for (const doc of retryDocs) {
+    // Only retry if last error was transient
+    const lastErrorTransient = doc.deletionError?.startsWith('TRANSIENT:') || false;
+    if (!lastErrorTransient && doc.deletionRetryCount > 0) {
+      console.log(`[Retention Worker] Skipping retry for ${doc.documentId} - last error was permanent`);
+      continue;
+    }
+
     summary.retried += 1;
     try {
       await deleteS3Object({ key: doc.s3Key });
@@ -628,10 +679,27 @@ export async function runRetentionDeletionWorker() {
         metadata: { patientId: doc.patientId, retryCount: doc.deletionRetryCount },
       });
     } catch (err) {
+      const isTransient = isTransientS3Error(err);
       doc.deletionRetryCount += 1;
-      doc.deletionError = err.message;
+      doc.deletionError = `${isTransient ? 'TRANSIENT' : 'PERMANENT'}: ${err.message}`;
       await doc.save();
       summary.failed += 1;
+
+      if (!isTransient || doc.deletionRetryCount >= 5) {
+        await logAction({
+          actor: 'SYSTEM_RETENTION_RETRY_WORKER',
+          action: 'Document Auto-Purge Retry Exhausted',
+          entityType: 'MedicalDocument',
+          entityId: doc.documentId,
+          metadata: {
+            patientId: doc.patientId,
+            error: err.message,
+            isTransient,
+            retryCount: doc.deletionRetryCount,
+            requiresManualIntervention: true,
+          },
+        });
+      }
     }
   }
 
