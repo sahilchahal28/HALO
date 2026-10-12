@@ -17,6 +17,58 @@ const getCategoryIcon = (category) => {
   return <Package size={12} className="text-ink-muted-48 shrink-0" />;
 };
 
+function PatientDirectoryQR({ patient, onZoom }) {
+  const [qrUrl, setQrUrl] = useState('');
+
+  useEffect(() => {
+    let isMounted = true;
+    const token = patient?.qrCodeToken || patient?.patientId;
+    if (token) {
+      QRCode.toDataURL(token, {
+        width: 250,
+        margin: 1,
+        color: { dark: '#000000', light: '#ffffff' },
+      })
+        .then((url) => {
+          if (isMounted) setQrUrl(url);
+        })
+        .catch((err) => console.error('Failed generating row QR:', err));
+    }
+    return () => { isMounted = false; };
+  }, [patient?.qrCodeToken, patient?.patientId]);
+
+  if (!qrUrl) {
+    return (
+      <div className="w-10 h-10 rounded-xl bg-canvas-parchment border border-hairline flex items-center justify-center animate-pulse">
+        <QrCode size={16} className="text-ink-muted-48 opacity-40" />
+      </div>
+    );
+  }
+
+  return (
+    <div
+      onClick={(e) => {
+        e.stopPropagation();
+        onZoom(qrUrl, patient);
+      }}
+      className="group relative flex items-center gap-2 p-1 bg-white hover:bg-canvas-parchment border border-hairline hover:border-primary rounded-xl cursor-pointer transition-all shadow-2xs"
+      title={`Click to zoom QR Code for ${patient.name}`}
+    >
+      <img
+        src={qrUrl}
+        alt={`QR Pass - ${patient.name}`}
+        className="w-10 h-10 object-contain rounded-lg border border-hairline bg-white flex-shrink-0"
+      />
+      <div className="hidden sm:flex flex-col text-left pr-1.5">
+        <span className="text-[10px] font-bold text-ink group-hover:text-primary flex items-center gap-1">
+          <QrCode size={11} className="text-primary" /> Zoom QR
+        </span>
+        <span className="text-[9px] text-ink-muted-48 font-mono">{patient.patientId}</span>
+      </div>
+    </div>
+  );
+}
+
 export default function AdminDashboard() {
   const {
     logout, t, beds, setBeds, patients, setPatients, ambulanceRequests,
@@ -66,6 +118,7 @@ export default function AdminDashboard() {
   const [patientQrBlob, setPatientQrBlob] = useState('');
   const [activeCardPatient, setActiveCardPatient] = useState(null);
   const [showQrZoom, setShowQrZoom] = useState(null);
+  const [zoomPatient, setZoomPatient] = useState(null);
 
   // Selected Patient Details state
   const [selectedPatient, setSelectedPatient] = useState(null);
@@ -123,7 +176,24 @@ export default function AdminDashboard() {
   // Load selected patient details, active episode, and timeline events
   useEffect(() => {
     async function loadSelectedPatientDetails() {
-      if (!selectedPatient) return;
+      if (!selectedPatient) {
+        setSelectedPatientDocuments([]);
+        setPatientQrBlob('');
+        return;
+      }
+
+      // Generate high-resolution patient QR code immediately so it is ALWAYS present
+      try {
+        const qrUrl = await QRCode.toDataURL(selectedPatient.qrCodeToken || selectedPatient.patientId, {
+          width: 450,
+          margin: 1,
+          color: { dark: '#000000', light: '#ffffff' }
+        });
+        setPatientQrBlob(qrUrl);
+      } catch (qrErr) {
+        console.error('Error generating patient QR code:', qrErr);
+      }
+
       try {
         const eps = await api.get(`/episodes?patientId=${selectedPatient.patientId}`);
         const active = eps.find(e => e.status === 'ACTIVE') || eps[eps.length - 1] || null;
@@ -136,14 +206,6 @@ export default function AdminDashboard() {
         // Fetch patient documents
         const docs = await api.get(`/patients/${selectedPatient.patientId}/documents`);
         setSelectedPatientDocuments(docs || []);
-
-        // Generate high-resolution patient QR code for reliable camera scanning
-        const qrUrl = await QRCode.toDataURL(selectedPatient.qrCodeToken || selectedPatient.patientId, {
-          width: 450,
-          margin: 1,
-          color: { dark: '#000000', light: '#ffffff' }
-        });
-        setPatientQrBlob(qrUrl);
       } catch (err) {
         console.error('Error loading patient details:', err);
       }
@@ -1152,15 +1214,31 @@ export default function AdminDashboard() {
                     <div
                       key={p.patientId}
                       onClick={() => setSelectedPatient(p)}
-                      className="py-3 flex justify-between items-center text-xs cursor-pointer hover:bg-canvas-parchment px-4 rounded-[12px] transition-all"
+                      className="py-3 flex justify-between items-center text-xs cursor-pointer hover:bg-canvas-parchment px-4 rounded-[14px] transition-all gap-3"
                     >
-                      <div>
-                        <span className="font-bold text-ink">{p.name}</span>
-                        <span className="text-ink-muted-48 block text-[10px] mt-0.5 font-mono">{p.patientId}</span>
+                      <div className="min-w-0">
+                        <span className="font-bold text-ink truncate block">{p.name}</span>
+                        <div className="flex items-center gap-2 text-[10px] text-ink-muted-48 mt-0.5">
+                          <span className="font-mono">{p.patientId}</span>
+                          <span>•</span>
+                          <span>{p.gender || 'Patient'}, {p.age ? `${p.age}y` : 'Age N/A'}</span>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-3">
-                        <span className="text-[10px] bg-canvas-parchment border border-hairline text-ink px-2.5 py-0.5 rounded-full font-bold">{p.bloodGroup}</span>
-                        <span className="text-[11px] text-ink-muted-48">{p.phone}</span>
+
+                      <div className="flex items-center gap-3 flex-shrink-0">
+                        <span className="text-[10px] bg-canvas-parchment border border-hairline text-ink px-2.5 py-0.5 rounded-full font-bold">
+                          {p.bloodGroup}
+                        </span>
+                        <span className="text-[11px] text-ink-muted-48 hidden md:inline">
+                          {p.phone}
+                        </span>
+                        <PatientDirectoryQR
+                          patient={p}
+                          onZoom={(url, pt) => {
+                            setZoomPatient(pt);
+                            setShowQrZoom(url);
+                          }}
+                        />
                       </div>
                     </div>
                   ))}
@@ -2996,21 +3074,24 @@ export default function AdminDashboard() {
       {/* Full-Screen Super-Sized QR Code Zoom Modal */}
       {showQrZoom && (
         <div
-          className="fixed inset-0 bg-black/80 z-[100] flex justify-center items-center p-6 backdrop-blur-md cursor-pointer"
-          onClick={() => setShowQrZoom(null)}
+          className="fixed inset-0 bg-black/80 z-[100] flex justify-center items-center p-6 backdrop-blur-md cursor-pointer animate-fadeIn"
+          onClick={() => { setShowQrZoom(null); setZoomPatient(null); }}
         >
           <div
             className="bg-white p-8 rounded-3xl flex flex-col items-center max-w-md w-full shadow-2xl relative border border-hairline"
             onClick={e => e.stopPropagation()}
           >
             <button
-              onClick={() => setShowQrZoom(null)}
+              onClick={() => { setShowQrZoom(null); setZoomPatient(null); }}
               className="absolute top-4 right-4 text-ink-muted-48 hover:text-ink text-xs font-bold bg-canvas-parchment border border-hairline px-3.5 py-1.5 rounded-full cursor-pointer"
             >
               ✕ Close
             </button>
             <span className="text-xs text-ink-muted-48 uppercase font-bold tracking-widest mb-1">High-Resolution Patient QR Pass</span>
-            <h3 className="text-lg font-bold text-ink mb-4">{selectedPatient?.name || activeCardPatient?.name || 'Clinical QR Pass'}</h3>
+            <h3 className="text-lg font-bold text-ink mb-1">{zoomPatient?.name || selectedPatient?.name || activeCardPatient?.name || 'Clinical QR Pass'}</h3>
+            {(zoomPatient?.patientId || selectedPatient?.patientId) && (
+              <span className="text-[11px] text-ink-muted-48 font-mono mb-4">{zoomPatient?.patientId || selectedPatient?.patientId}</span>
+            )}
             <div className="bg-white p-4 rounded-2xl border-2 border-hairline shadow-inner mb-4">
               <img src={showQrZoom} alt="Enlarged QR Code" className="w-72 h-72 md:w-80 md:h-80 object-contain" />
             </div>
