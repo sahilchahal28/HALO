@@ -34,7 +34,7 @@ export default function DoctorDashboard() {
   const handleLoginSubmit = async (e) => {
     e.preventDefault();
     const rawPhone = (loginForm.phone || '').trim();
-    const rawId = (loginForm.id || '').trim();
+    const rawId = (loginForm.id || '').trim().replace(/[\s.]+/g, '-').replace(/-+/g, '-').toUpperCase();
     if (!rawPhone || !rawId) return;
     setLoggingIn(true);
     try {
@@ -501,7 +501,27 @@ export default function DoctorDashboard() {
                 type="text" 
                 placeholder="HALO-DOC-XX-XXXX" 
                 value={loginForm.id}
-                onChange={e => setLoginForm(prev => ({ ...prev, id: e.target.value }))}
+                onChange={e => {
+                  const val = e.target.value.replace(/[\s.]+/g, '-').replace(/-+/g, '-').toUpperCase();
+                  setLoginForm(prev => ({ ...prev, id: val }));
+                }}
+                onKeyDown={e => {
+                  if (e.key === ' ' || e.key === '.') {
+                    e.preventDefault();
+                    const input = e.target;
+                    const start = input.selectionStart;
+                    const end = input.selectionEnd;
+                    const val = input.value;
+                    if (start > 0 && val[start - 1] === '-' && start === end) {
+                      return;
+                    }
+                    const newVal = (val.slice(0, start) + '-' + val.slice(end)).replace(/-+/g, '-').toUpperCase();
+                    setLoginForm(prev => ({ ...prev, id: newVal }));
+                    requestAnimationFrame(() => {
+                      input.setSelectionRange(start + 1, start + 1);
+                    });
+                  }
+                }}
                 className="w-full px-4 py-3 text-xs bg-canvas-parchment border border-hairline focus:border-hairline-strong rounded-full focus:outline-none transition-all shadow-none font-mono uppercase"
                 style={{ borderRadius: '30px' }}
                 required
