@@ -70,16 +70,32 @@ app.use('/api', authenticate, apiRouter);
 // Clients respond by refetching their role-relevant data.
 // ---------------------------------------------------------------------------
 const allowedOrigins = [
+  process.env.CLIENT_URL,
   'https://halo-wheat.vercel.app',
   'http://localhost:5173',
   'http://localhost:5174',
   'http://127.0.0.1:5173',
   'http://127.0.0.1:5174',
-];
+].filter(Boolean);
 
 const server = http.createServer(app);
 const io = new SocketServer(server, {
-  cors: { origin: allowedOrigins, credentials: true },
+  cors: {
+    origin: (origin, callback) => {
+      // Allow requests with no origin (e.g. mobile apps, curl)
+      if (!origin) return callback(null, true);
+      if (
+        allowedOrigins.includes(origin) ||
+        origin.endsWith('.vercel.app') ||
+        origin.startsWith('http://localhost:') ||
+        origin.startsWith('http://127.0.0.1:')
+      ) {
+        return callback(null, true);
+      }
+      callback(new Error('Not allowed by CORS'));
+    },
+    credentials: true,
+  },
 });
 
 // Socket auth — same rules as the HTTP API

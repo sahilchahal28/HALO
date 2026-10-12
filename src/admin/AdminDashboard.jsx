@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { api } from '../utils/api';
-import { 
-  Building2, Users, Bed, Truck, Droplet, Package, 
+import {
+  Building2, Users, Bed, Truck, Droplet, Package,
   UserPlus, Plus, Search, Calendar, ChevronRight, AlertTriangle,
   Activity, Pill, FlaskConical, Stethoscope, QrCode
 } from 'lucide-react';
@@ -18,8 +18,8 @@ const getCategoryIcon = (category) => {
 };
 
 export default function AdminDashboard() {
-  const { 
-    logout, t, beds, setBeds, patients, setPatients, ambulanceRequests, 
+  const {
+    logout, t, beds, setBeds, patients, setPatients, ambulanceRequests,
     bloodBank, setBloodBank, inventory, setInventory, surgeries, setSurgeries, addToast, refreshData, departments,
     ambulanceVehicles, setAmbulanceVehicles, doctors, setDoctors, wasOfflineRef, donorsList, setDonorsList
   } = useApp();
@@ -36,12 +36,12 @@ export default function AdminDashboard() {
     setActiveTabState(tab);
     localStorage.setItem('halo_admin_active_tab', tab);
   };
-  
+
   // Registration state
   const [regForm, setRegForm] = useState({
-    name: '', aadhaarNumber: '', phone: '', age: '', gender: 'Male', dob: '', 
-    bloodGroup: 'O-', address: '', emergencyName: '', 
-    emergencyPhone: '', emergencyRelation: 'Spouse', 
+    name: '', aadhaarNumber: '', phone: '', age: '', gender: 'Male', dob: '',
+    bloodGroup: 'O-', address: '', emergencyName: '',
+    emergencyPhone: '', emergencyRelation: 'Spouse',
     allergies: '', medicalHistory: ''
   });
 
@@ -49,11 +49,11 @@ export default function AdminDashboard() {
   const [selectedBed, setSelectedBed] = useState(null);
   const [assignPatientId, setAssignPatientId] = useState('');
   const [newBedForm, setNewBedForm] = useState({ bedId: '', wardId: 'WARD-GEN', bedNumber: '' });
-  
+
   // Blood Requirement State
   const [bloodReq, setBloodReq] = useState({ group: '', units: 1 });
   const [eligibleDonors, setEligibleDonors] = useState([]);
-  
+
   // Inventory movement State
   const [invMove, setInvMove] = useState({ itemId: '', type: 'Received', qty: 1, notes: '' });
 
@@ -156,7 +156,7 @@ export default function AdminDashboard() {
     try {
       const donors = await api.get(`/bloodbank/donors/${group}`);
       setEligibleDonors(donors);
-    } catch (_) {}
+    } catch (_) { }
   };
 
   const handleRegisterPatient = async (e) => {
@@ -193,7 +193,7 @@ export default function AdminDashboard() {
       });
 
       addToast(`Patient registered! Generated ID: ${patient.patientId}`, 'success');
-      
+
       // Auto create a treatment episode for this patient with the first doctor
       if (doctorsList.length > 0) {
         const doc = doctorsList[0];
@@ -208,12 +208,12 @@ export default function AdminDashboard() {
       const qrUrl = await QRCode.toDataURL(patient.qrCodeToken);
       setQrBlob(qrUrl);
       setActiveCardPatient(patient);
-      
+
       // Reset form
       setRegForm({
-        name: '', aadhaarNumber: '', phone: '', age: '', gender: 'Male', dob: '', 
-        bloodGroup: 'O-', address: '', emergencyName: '', 
-        emergencyPhone: '', emergencyRelation: 'Spouse', 
+        name: '', aadhaarNumber: '', phone: '', age: '', gender: 'Male', dob: '',
+        bloodGroup: 'O-', address: '', emergencyName: '',
+        emergencyPhone: '', emergencyRelation: 'Spouse',
         allergies: '', medicalHistory: ''
       });
       refreshData();
@@ -246,7 +246,7 @@ export default function AdminDashboard() {
           return b;
         });
         setBeds(updatedBeds);
-        try { localStorage.setItem('halo_beds', JSON.stringify(updatedBeds)); } catch (_) {}
+        try { localStorage.setItem('halo_beds', JSON.stringify(updatedBeds)); } catch (_) { }
 
         const updatedPatients = patients.map(p => {
           if (p.patientId === assignPatientId) {
@@ -255,7 +255,7 @@ export default function AdminDashboard() {
           return p;
         });
         setPatients(updatedPatients);
-        try { localStorage.setItem('halo_patients', JSON.stringify(updatedPatients)); } catch (_) {}
+        try { localStorage.setItem('halo_patients', JSON.stringify(updatedPatients)); } catch (_) { }
 
         addToast(`[Offline] Bed ${selectedBed.bedId} allocated to ${patient ? patient.name : assignPatientId}`, 'success');
         setSelectedBed(null);
@@ -281,7 +281,7 @@ export default function AdminDashboard() {
           return b;
         });
         setBeds(updatedBeds);
-        try { localStorage.setItem('halo_beds', JSON.stringify(updatedBeds)); } catch (_) {}
+        try { localStorage.setItem('halo_beds', JSON.stringify(updatedBeds)); } catch (_) { }
         addToast(`[Offline] Bed ${bedId} marked Available`, 'success');
         setSelectedBed(null);
       } else {
@@ -310,8 +310,8 @@ export default function AdminDashboard() {
           return b;
         });
         setBeds(updatedBeds);
-        try { localStorage.setItem('halo_beds', JSON.stringify(updatedBeds)); } catch (_) {}
-        
+        try { localStorage.setItem('halo_beds', JSON.stringify(updatedBeds)); } catch (_) { }
+
         const releasedBed = beds.find(b => b.bedId === bedId);
         if (releasedBed && releasedBed.status === 'OCCUPIED' && status !== 'OCCUPIED') {
           const updatedPatients = patients.map(p => {
@@ -321,7 +321,7 @@ export default function AdminDashboard() {
             return p;
           });
           setPatients(updatedPatients);
-          try { localStorage.setItem('halo_patients', JSON.stringify(updatedPatients)); } catch (_) {}
+          try { localStorage.setItem('halo_patients', JSON.stringify(updatedPatients)); } catch (_) { }
         }
 
         addToast(`[Offline] Bed ${bedId} status updated to ${status}`, 'success');
@@ -501,7 +501,7 @@ export default function AdminDashboard() {
 
     const qty = Number(invMove.qty) || 0;
     const isReduction = invMove.type === 'Dispensed' || invMove.type === 'Waste' || invMove.type === 'DISPENSED' || invMove.type === 'WASTE';
-    
+
     // Optimistic instant UI update
     setInventory(prev => prev.map(item => {
       if (item.itemId === invMove.itemId) {
@@ -511,7 +511,7 @@ export default function AdminDashboard() {
       return item;
     }));
     addToast('Inventory movement logged & updated.', 'success');
-    
+
     const currentMove = { ...invMove };
     setInvMove({ itemId: '', type: 'Received', qty: 1, notes: '' });
 
@@ -640,7 +640,7 @@ export default function AdminDashboard() {
     bloodAlerts: bloodBank.some(b => b.unitsAvailable <= 1)
   };
 
-  const filteredPatients = patients.filter(pt => 
+  const filteredPatients = patients.filter(pt =>
     (pt.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
     (pt.patientId || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
     (pt.phone || '').toLowerCase().includes(searchQuery.toLowerCase())
@@ -648,7 +648,7 @@ export default function AdminDashboard() {
 
   return (
     <div className="min-h-screen bg-canvas-parchment flex flex-col font-sans">
-      
+
       {/* Sticky Header Group */}
       <header className="sticky top-0 z-40 shrink-0 flex flex-col">
         {/* 1. Global Navigation Bar (Apple True Black, 44px) */}
@@ -663,7 +663,7 @@ export default function AdminDashboard() {
             <span className="text-[10px] text-body-muted uppercase tracking-wider">
               System Operations Command
             </span>
-            <button 
+            <button
               onClick={logout}
               className="text-xs text-on-dark hover:text-primary-on-dark transition-colors cursor-pointer"
             >
@@ -693,69 +693,69 @@ export default function AdminDashboard() {
 
       {/* Admin Dashboard Workspace Split */}
       <div className="flex flex-1 flex-col lg:flex-row">
-        
+
         {/* Left Nav Menu Sidebar */}
         <aside className="w-full lg:w-64 shrink-0 border-r border-hairline bg-canvas-parchment p-6 flex flex-col gap-1.5 lg:sticky lg:top-24 lg:h-[calc(100vh-6rem)] overflow-y-auto">
           <h2 className="text-xs text-ink-muted-48 tracking-widest uppercase mb-3 pl-3.5 font-semibold">Management</h2>
-          
-          <button 
-            onClick={() => setActiveTab('overview')} 
+
+          <button
+            onClick={() => setActiveTab('overview')}
             className={`w-full text-left justify-start px-3.5 py-2.5 rounded-[11px] text-sm flex items-center gap-3 transition-all cursor-pointer ${activeTab === 'overview' ? 'bg-ink text-canvas font-semibold shadow-sm' : 'text-ink hover:bg-divider-soft font-medium'}`}
           >
             <Building2 size={16} className="shrink-0" />
             <span>Overview Command</span>
           </button>
-          <button 
-            onClick={() => setActiveTab('register')} 
+          <button
+            onClick={() => setActiveTab('register')}
             className={`w-full text-left justify-start px-3.5 py-2.5 rounded-[11px] text-sm flex items-center gap-3 transition-all cursor-pointer ${activeTab === 'register' ? 'bg-ink text-canvas font-semibold shadow-sm' : 'text-ink hover:bg-divider-soft font-medium'}`}
           >
             <UserPlus size={16} className="shrink-0" />
             <span>Register Patient</span>
           </button>
-          <button 
-            onClick={() => setActiveTab('patients')} 
+          <button
+            onClick={() => setActiveTab('patients')}
             className={`w-full text-left justify-start px-3.5 py-2.5 rounded-[11px] text-sm flex items-center gap-3 transition-all cursor-pointer ${activeTab === 'patients' ? 'bg-ink text-canvas font-semibold shadow-sm' : 'text-ink hover:bg-divider-soft font-medium'}`}
           >
             <Users size={16} className="shrink-0" />
             <span>Patients Directory</span>
           </button>
-          <button 
-            onClick={() => setActiveTab('beds')} 
+          <button
+            onClick={() => setActiveTab('beds')}
             className={`w-full text-left justify-start px-3.5 py-2.5 rounded-[11px] text-sm flex items-center gap-3 transition-all cursor-pointer ${activeTab === 'beds' ? 'bg-ink text-canvas font-semibold shadow-sm' : 'text-ink hover:bg-divider-soft font-medium'}`}
           >
             <Bed size={16} className="shrink-0" />
             <span>Bed Management</span>
           </button>
-          <button 
-            onClick={() => setActiveTab('doctors')} 
+          <button
+            onClick={() => setActiveTab('doctors')}
             className={`w-full text-left justify-start px-3.5 py-2.5 rounded-[11px] text-sm flex items-center gap-3 transition-all cursor-pointer ${activeTab === 'doctors' ? 'bg-ink text-canvas font-semibold shadow-sm' : 'text-ink hover:bg-divider-soft font-medium'}`}
           >
             <Stethoscope size={16} className="shrink-0" />
             <span>Doctors Registry</span>
           </button>
-          <button 
-            onClick={() => setActiveTab('ambulance')} 
+          <button
+            onClick={() => setActiveTab('ambulance')}
             className={`w-full text-left justify-start px-3.5 py-2.5 rounded-[11px] text-sm flex items-center gap-3 transition-all cursor-pointer ${activeTab === 'ambulance' ? 'bg-ink text-canvas font-semibold shadow-sm' : 'text-ink hover:bg-divider-soft font-medium'}`}
           >
             <Truck size={16} className="shrink-0" />
             <span>Ambulance Control</span>
           </button>
-          <button 
-            onClick={() => setActiveTab('blood')} 
+          <button
+            onClick={() => setActiveTab('blood')}
             className={`w-full text-left justify-start px-3.5 py-2.5 rounded-[11px] text-sm flex items-center gap-3 transition-all cursor-pointer ${activeTab === 'blood' ? 'bg-ink text-canvas font-semibold shadow-sm' : 'text-ink hover:bg-divider-soft font-medium'}`}
           >
             <Droplet size={16} className="shrink-0" />
             <span>Blood Bank Module</span>
           </button>
-          <button 
-            onClick={() => setActiveTab('inventory')} 
+          <button
+            onClick={() => setActiveTab('inventory')}
             className={`w-full text-left justify-start px-3.5 py-2.5 rounded-[11px] text-sm flex items-center gap-3 transition-all cursor-pointer ${activeTab === 'inventory' ? 'bg-ink text-canvas font-semibold shadow-sm' : 'text-ink hover:bg-divider-soft font-medium'}`}
           >
             <Package size={16} className="shrink-0" />
             <span>Pharmacy Inventory</span>
           </button>
-          <button 
-            onClick={() => setActiveTab('surgeries')} 
+          <button
+            onClick={() => setActiveTab('surgeries')}
             className={`w-full text-left justify-start px-3.5 py-2.5 rounded-[11px] text-sm flex items-center gap-3 transition-all cursor-pointer ${activeTab === 'surgeries' ? 'bg-ink text-canvas font-semibold shadow-sm' : 'text-ink hover:bg-divider-soft font-medium'}`}
           >
             <Calendar size={16} className="shrink-0" />
@@ -765,15 +765,15 @@ export default function AdminDashboard() {
 
         {/* Right Main Dashboard Panel */}
         <main className="flex-grow min-w-0 p-8 bg-canvas-parchment">
-          
+
           {/* ==================== OVERVIEW COMMAND TAB ==================== */}
           {activeTab === 'overview' && (
             <div className="space-y-8">
-              
+
               {/* Statistics Cards */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                
-                <div 
+
+                <div
                   className="bg-canvas border border-hairline p-6 flex flex-col justify-between h-36"
                   style={{ borderRadius: '18px' }} // rounded.lg
                 >
@@ -787,7 +787,7 @@ export default function AdminDashboard() {
                   </div>
                 </div>
 
-                <div 
+                <div
                   className="bg-canvas border border-hairline p-6 flex flex-col justify-between h-36"
                   style={{ borderRadius: '18px' }} // rounded.lg
                 >
@@ -801,7 +801,7 @@ export default function AdminDashboard() {
                   </div>
                 </div>
 
-                <div 
+                <div
                   className="bg-canvas border border-hairline p-6 flex flex-col justify-between h-36"
                   style={{ borderRadius: '18px' }} // rounded.lg
                 >
@@ -815,10 +815,9 @@ export default function AdminDashboard() {
                   </div>
                 </div>
 
-                <div 
-                  className={`border p-6 flex flex-col justify-between h-36 ${
-                    stats.bloodAlerts ? 'bg-red-50/50 border-[#cf2d56] text-[#cf2d56]' : 'bg-canvas border-hairline text-ink'
-                  }`}
+                <div
+                  className={`border p-6 flex flex-col justify-between h-36 ${stats.bloodAlerts ? 'bg-red-50/50 border-[#cf2d56] text-[#cf2d56]' : 'bg-canvas border-hairline text-ink'
+                    }`}
                   style={{ borderRadius: '18px' }} // rounded.lg
                 >
                   <div className="flex justify-between items-start">
@@ -835,9 +834,9 @@ export default function AdminDashboard() {
 
               {/* Split grids */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                
+
                 {/* Active Surgeries list */}
-                <div 
+                <div
                   className="bg-canvas border border-hairline p-6"
                   style={{ borderRadius: '18px' }}
                 >
@@ -867,7 +866,7 @@ export default function AdminDashboard() {
                 </div>
 
                 {/* Active Emergency dispatch */}
-                <div 
+                <div
                   className="bg-canvas border border-hairline p-6"
                   style={{ borderRadius: '18px' }}
                 >
@@ -901,20 +900,20 @@ export default function AdminDashboard() {
           {activeTab === 'register' && (
             <div className="h-[calc(100vh-140px)] overflow-hidden flex flex-col md:flex-row gap-8">
               {/* Registration Form */}
-              <div 
+              <div
                 className="flex-1 bg-canvas border border-hairline p-6 overflow-y-auto"
                 style={{ borderRadius: '18px' }}
               >
                 <h3 className="text-lg font-semibold text-ink mb-4 flex items-center gap-2">
                   <UserPlus size={18} /> Register Demographics Profile
                 </h3>
-                
+
                 <form onSubmit={handleRegisterPatient} className="space-y-4">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-xs text-ink uppercase mb-1 font-semibold">Full Patient Name</label>
-                      <input 
-                        type="text" required value={regForm.name} 
+                      <input
+                        type="text" required value={regForm.name}
                         onChange={e => setRegForm({ ...regForm, name: e.target.value })}
                         className="w-full text-sm" placeholder="John Doe"
                       />
@@ -924,17 +923,17 @@ export default function AdminDashboard() {
                         <span>12-Digit Aadhaar Number</span>
                         <span className="text-[10px] text-primary lowercase font-normal font-sans">unique identifier</span>
                       </label>
-                      <input 
-                        type="text" 
-                        required 
+                      <input
+                        type="text"
+                        required
                         maxLength={14}
-                        value={regForm.aadhaarNumber} 
+                        value={regForm.aadhaarNumber}
                         onChange={e => {
                           const raw = e.target.value.replace(/\D/g, '').slice(0, 12);
                           const formatted = raw.replace(/(\d{4})(?=\d)/g, '$1 ');
                           setRegForm({ ...regForm, aadhaarNumber: formatted });
                         }}
-                        className="w-full text-sm font-mono tracking-wider" 
+                        className="w-full text-sm font-mono tracking-wider"
                         placeholder="XXXX XXXX XXXX"
                       />
                     </div>
@@ -947,8 +946,8 @@ export default function AdminDashboard() {
                         <div className="bg-canvas border-r border-hairline px-3 text-sm text-ink-muted-48 font-bold flex items-center shrink-0">
                           +91
                         </div>
-                        <input 
-                          type="text" required value={regForm.phone} 
+                        <input
+                          type="text" required value={regForm.phone}
                           onChange={e => setRegForm({ ...regForm, phone: e.target.value })}
                           className="w-full text-sm px-3 bg-transparent focus:outline-none border-none h-full font-mono" placeholder="98765 43210"
                         />
@@ -956,8 +955,8 @@ export default function AdminDashboard() {
                     </div>
                     <div>
                       <label className="block text-xs text-ink uppercase mb-1 font-semibold">Date of Birth</label>
-                      <input 
-                        type="date" required value={regForm.dob} 
+                      <input
+                        type="date" required value={regForm.dob}
                         onChange={e => setRegForm({ ...regForm, dob: e.target.value })}
                         className="w-full text-sm h-11"
                       />
@@ -967,16 +966,16 @@ export default function AdminDashboard() {
                   <div className="grid grid-cols-3 gap-4">
                     <div>
                       <label className="block text-xs text-ink uppercase mb-1 font-semibold">Age</label>
-                      <input 
-                        type="number" required value={regForm.age} 
+                      <input
+                        type="number" required value={regForm.age}
                         onChange={e => setRegForm({ ...regForm, age: e.target.value })}
                         className="w-full text-sm" placeholder="32"
                       />
                     </div>
                     <div>
                       <label className="block text-xs text-ink uppercase mb-1 font-semibold">Gender</label>
-                      <select 
-                        value={regForm.gender} 
+                      <select
+                        value={regForm.gender}
                         onChange={e => setRegForm({ ...regForm, gender: e.target.value })}
                         className="w-full text-sm h-11"
                       >
@@ -987,8 +986,8 @@ export default function AdminDashboard() {
                     </div>
                     <div>
                       <label className="block text-xs text-ink uppercase mb-1 font-semibold">Blood Group</label>
-                      <select 
-                        value={regForm.bloodGroup} 
+                      <select
+                        value={regForm.bloodGroup}
                         onChange={e => setRegForm({ ...regForm, bloodGroup: e.target.value })}
                         className="w-full text-sm h-11"
                       >
@@ -1001,8 +1000,8 @@ export default function AdminDashboard() {
 
                   <div>
                     <label className="block text-xs text-ink uppercase mb-1 font-semibold">Residential Address</label>
-                    <input 
-                      type="text" required value={regForm.address} 
+                    <input
+                      type="text" required value={regForm.address}
                       onChange={e => setRegForm({ ...regForm, address: e.target.value })}
                       className="w-full text-sm" placeholder="House/Street, City, State"
                     />
@@ -1014,8 +1013,8 @@ export default function AdminDashboard() {
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                       <div>
                         <label className="block text-xs text-ink uppercase mb-0.5 font-semibold">Contact Name</label>
-                        <input 
-                          type="text" required value={regForm.emergencyName} 
+                        <input
+                          type="text" required value={regForm.emergencyName}
                           onChange={e => setRegForm({ ...regForm, emergencyName: e.target.value })}
                           className="w-full text-sm" placeholder="Contact Name"
                         />
@@ -1026,8 +1025,8 @@ export default function AdminDashboard() {
                           <div className="bg-canvas border-r border-hairline px-3 text-sm text-ink-muted-48 font-bold flex items-center shrink-0">
                             +91
                           </div>
-                          <input 
-                            type="text" required value={regForm.emergencyPhone} 
+                          <input
+                            type="text" required value={regForm.emergencyPhone}
                             onChange={e => setRegForm({ ...regForm, emergencyPhone: e.target.value })}
                             className="w-full text-sm px-3 bg-transparent focus:outline-none border-none h-full font-mono" placeholder="98765 43210"
                           />
@@ -1035,8 +1034,8 @@ export default function AdminDashboard() {
                       </div>
                       <div>
                         <label className="block text-xs text-ink uppercase mb-0.5 font-semibold">Relation</label>
-                        <input 
-                          type="text" required value={regForm.emergencyRelation} 
+                        <input
+                          type="text" required value={regForm.emergencyRelation}
                           onChange={e => setRegForm({ ...regForm, emergencyRelation: e.target.value })}
                           className="w-full text-sm" placeholder="Spouse"
                         />
@@ -1050,16 +1049,16 @@ export default function AdminDashboard() {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                       <div>
                         <label className="block text-xs text-ink uppercase mb-0.5 font-semibold">Allergies (comma separated)</label>
-                        <textarea 
-                          value={regForm.allergies} 
+                        <textarea
+                          value={regForm.allergies}
                           onChange={e => setRegForm({ ...regForm, allergies: e.target.value })}
                           className="w-full text-sm h-12 bg-canvas-parchment" placeholder="Penicillin, Peanuts"
                         />
                       </div>
                       <div>
                         <label className="block text-xs text-ink uppercase mb-0.5 font-semibold">Medical History (comma separated)</label>
-                        <textarea 
-                          value={regForm.medicalHistory} 
+                        <textarea
+                          value={regForm.medicalHistory}
                           onChange={e => setRegForm({ ...regForm, medicalHistory: e.target.value })}
                           className="w-full text-sm h-12 bg-canvas-parchment" placeholder="Hypertension, Appendectomy"
                         />
@@ -1067,7 +1066,7 @@ export default function AdminDashboard() {
                     </div>
                   </div>
 
-                  <button 
+                  <button
                     type="submit"
                     className="w-full bg-primary hover:bg-primary-focus text-canvas text-sm font-semibold py-3 rounded-full transition-colors uppercase cursor-pointer"
                   >
@@ -1080,7 +1079,7 @@ export default function AdminDashboard() {
               <div className="w-full md:w-96 flex flex-col justify-between bg-canvas border border-hairline p-6 apple-product-shadow" style={{ borderRadius: '18px' }}>
                 <div>
                   <h3 className="text-xs text-ink-muted-48 tracking-widest uppercase font-semibold mb-4">Active Patient Card</h3>
-                  
+
                   {activeCardPatient ? (
                     <div className="space-y-4">
                       <div className="bg-canvas border border-hairline p-5 rounded-[18px] space-y-4">
@@ -1091,7 +1090,7 @@ export default function AdminDashboard() {
                           </div>
                           <span className="text-xs text-canvas bg-ink px-2.5 py-0.5 rounded-full font-semibold">{activeCardPatient.bloodGroup}</span>
                         </div>
-                        
+
                         {/* Render QR code */}
                         <div className="flex justify-center my-4">
                           {qrBlob && <img src={qrBlob} alt="Secure QR Code" className="w-36 h-36 border border-hairline p-1" />}
@@ -1105,7 +1104,7 @@ export default function AdminDashboard() {
                       </div>
                     </div>
                   ) : (
-                    <div 
+                    <div
                       className="bg-canvas border border-dashed border-hairline p-8 text-center h-80 flex flex-col justify-center items-center text-ink-muted-48"
                       style={{ borderRadius: '18px' }}
                     >
@@ -1131,27 +1130,27 @@ export default function AdminDashboard() {
           {activeTab === 'patients' && (
             <div className="space-y-6">
               {/* Registry Summary List (Spanned Side-to-Side) */}
-              <div 
+              <div
                 className="w-full bg-canvas border border-hairline p-6 flex flex-col apple-product-shadow"
                 style={{ borderRadius: '24px', minHeight: '500px' }}
               >
                 <h4 className="text-xs text-ink-muted-48 uppercase mb-4 font-bold tracking-widest font-sans">Patients Registry Directory</h4>
-                
+
                 {/* Search Input with proper spacing */}
                 <div className="relative mb-4 shrink-0">
                   <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-ink-muted-48" size={16} />
-                  <input 
-                    type="text" placeholder="Search by name, ID, or phone..." 
+                  <input
+                    type="text" placeholder="Search by name, ID, or phone..."
                     value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
                     className="w-full pl-12 pr-4 py-3 text-xs rounded-full bg-canvas-parchment border border-hairline focus:border-hairline-strong focus:outline-none transition-all shadow-none"
                     style={{ borderRadius: '30px' }}
                   />
                 </div>
-                
+
                 <div className="flex-grow overflow-y-auto divide-y divide-hairline">
                   {filteredPatients.map(p => (
-                    <div 
-                      key={p.patientId} 
+                    <div
+                      key={p.patientId}
                       onClick={() => setSelectedPatient(p)}
                       className="py-3 flex justify-between items-center text-xs cursor-pointer hover:bg-canvas-parchment px-4 rounded-[12px] transition-all"
                     >
@@ -1174,7 +1173,7 @@ export default function AdminDashboard() {
               {/* Patient Management Console Modal Popup Window */}
               {selectedPatient && (
                 <div className="fixed inset-0 bg-[#000000]/60 z-[80] flex justify-center items-center backdrop-blur-sm p-4 md:p-8">
-                  <div 
+                  <div
                     className="bg-white border border-[#e5e5e5] p-8 max-w-6xl w-full flex flex-col max-h-[90vh] shadow-2xl relative"
                     style={{ borderRadius: '24px' }}
                   >
@@ -1186,17 +1185,17 @@ export default function AdminDashboard() {
                           Patient ID: {selectedPatient.patientId} | Status: <span className={selectedPatient.status === 'ACTIVE' || selectedPatient.status === 'ADMITTED' ? 'text-[#1f8a65] font-semibold' : 'text-[#cf2d56] font-semibold'}>{selectedPatient.status || 'ACTIVE'}</span>
                         </div>
                       </div>
-                      
+
                       <div className="flex items-center gap-4">
                         {patientQrBlob && (
-                          <button 
+                          <button
                             onClick={() => setShowQrZoom(patientQrBlob)}
                             className="flex items-center gap-2.5 bg-canvas-parchment border border-hairline hover:border-primary px-3 py-1.5 rounded-full cursor-pointer transition-all group"
                             title="Click to Zoom QR Code"
                           >
-                            <img 
-                              src={patientQrBlob} 
-                              alt="Patient Profile QR" 
+                            <img
+                              src={patientQrBlob}
+                              alt="Patient Profile QR"
                               className="w-8 h-8 border border-hairline rounded bg-white"
                             />
                             <span className="text-xs font-bold text-ink group-hover:text-primary flex items-center gap-1">
@@ -1204,7 +1203,7 @@ export default function AdminDashboard() {
                             </span>
                           </button>
                         )}
-                        
+
                         <button
                           onClick={async () => {
                             if (selectedPatient.status === 'INACTIVE') {
@@ -1238,16 +1237,15 @@ export default function AdminDashboard() {
                               }
                             }
                           }}
-                          className={`text-xs px-4 py-2 rounded-full cursor-pointer font-bold uppercase transition-all shadow-none ${
-                            selectedPatient.status === 'INACTIVE' 
-                              ? 'bg-[#cf2d56] hover:bg-[#b02244] text-white border-none' 
+                          className={`text-xs px-4 py-2 rounded-full cursor-pointer font-bold uppercase transition-all shadow-none ${selectedPatient.status === 'INACTIVE'
+                              ? 'bg-[#cf2d56] hover:bg-[#b02244] text-white border-none'
                               : 'bg-canvas border border-hairline hover:border-hairline-strong text-ink bg-canvas-parchment'
-                          }`}
+                            }`}
                           style={{ borderRadius: '20px' }}
                         >
                           {selectedPatient.status === 'INACTIVE' ? 'REMOVE PATIENT' : 'Deactivate Profile'}
                         </button>
-                        
+
                         {selectedPatient.status === 'INACTIVE' && (
                           <button
                             onClick={async () => {
@@ -1266,8 +1264,8 @@ export default function AdminDashboard() {
                             Reactivate
                           </button>
                         )}
-                        
-                        <button 
+
+                        <button
                           onClick={() => setSelectedPatient(null)}
                           className="text-xs text-ink-muted-48 hover:text-ink border border-hairline hover:border-hairline-strong px-4 py-2 rounded-full cursor-pointer font-bold uppercase bg-canvas-parchment transition-all"
                           style={{ borderRadius: '20px' }}
@@ -1287,13 +1285,13 @@ export default function AdminDashboard() {
                             <span className="text-[10px] text-ink font-bold uppercase tracking-widest flex items-center gap-1.5">
                               <QrCode size={14} className="text-primary" /> Clinical Access QR Pass
                             </span>
-                            <div 
+                            <div
                               onClick={() => setShowQrZoom(patientQrBlob)}
                               className="relative group cursor-pointer p-2.5 bg-white rounded-2xl border-2 border-hairline shadow-md hover:shadow-lg transition-all"
                             >
-                              <img 
-                                src={patientQrBlob} 
-                                alt="Patient QR Code" 
+                              <img
+                                src={patientQrBlob}
+                                alt="Patient QR Code"
                                 className="w-52 h-52 object-contain rounded-xl transition-transform group-hover:scale-105"
                               />
                               <div className="absolute inset-0 bg-black/10 opacity-0 group-hover:opacity-100 transition-opacity rounded-2xl flex items-center justify-center">
@@ -1589,18 +1587,18 @@ export default function AdminDashboard() {
                             <form onSubmit={handleAddNewCharge} className="border-t border-hairline pt-4 space-y-3">
                               <span className="text-[11px] text-ink block font-semibold uppercase">Add Manual Cost Item</span>
                               <div>
-                                <input 
+                                <input
                                   type="text" placeholder="Description (e.g. ECG scan)" required
                                   value={newBillItem.description}
-                                  onChange={e => setNewBillItem({...newBillItem, description: e.target.value})}
+                                  onChange={e => setNewBillItem({ ...newBillItem, description: e.target.value })}
                                   className="w-full text-xs px-3 py-1.5 rounded-full border border-hairline"
                                   style={{ borderRadius: '20px' }}
                                 />
                               </div>
                               <div className="grid grid-cols-2 gap-2">
-                                <select 
+                                <select
                                   value={newBillItem.category}
-                                  onChange={e => setNewBillItem({...newBillItem, category: e.target.value})}
+                                  onChange={e => setNewBillItem({ ...newBillItem, category: e.target.value })}
                                   className="text-xs px-2 py-1.5 rounded-full border border-hairline bg-canvas"
                                   style={{ borderRadius: '20px' }}
                                 >
@@ -1608,15 +1606,15 @@ export default function AdminDashboard() {
                                     <option key={c} value={c}>{c}</option>
                                   ))}
                                 </select>
-                                <input 
+                                <input
                                   type="number" placeholder="Price (₹)" required
                                   value={newBillItem.price || ''}
-                                  onChange={e => setNewBillItem({...newBillItem, price: Number(e.target.value)})}
+                                  onChange={e => setNewBillItem({ ...newBillItem, price: Number(e.target.value) })}
                                   className="text-xs px-2.5 py-1.5 rounded-full border border-hairline"
                                   style={{ borderRadius: '20px' }}
                                 />
                               </div>
-                              <button 
+                              <button
                                 type="submit"
                                 className="w-full bg-ink hover:bg-ink-muted-80 text-canvas py-2 rounded-full text-[10px] font-bold uppercase transition-colors cursor-pointer"
                                 style={{ borderRadius: '20px' }}
@@ -1637,7 +1635,7 @@ export default function AdminDashboard() {
                           {timelineLogs.map((log, i) => (
                             <div key={i} className="flex gap-2 text-xs">
                               <span className="text-[10px] text-ink-muted-48 font-mono shrink-0 pt-0.5">
-                               {safeLocaleTimeString(log.timestamp)}
+                                {safeLocaleTimeString(log.timestamp)}
                               </span>
                               <div>
                                 <strong className="text-ink block">{log.action}</strong>
@@ -1667,14 +1665,14 @@ export default function AdminDashboard() {
           {activeTab === 'beds' && (
             <div className="space-y-8">
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                
+
                 {/* Visual Bed Grid map */}
-                <div 
+                <div
                   className="lg:col-span-2 bg-canvas border border-hairline p-6"
                   style={{ borderRadius: '18px' }}
                 >
                   <h3 className="text-xs text-ink-muted-48 tracking-widest uppercase mb-6 font-semibold">Interactive Bed Ward Layout Map</h3>
-                  
+
                   <div className="space-y-6">
                     {['ICU', 'CCU', 'General Ward', 'Private Ward'].map(dept => {
                       const deptBeds = beds.filter(b => b.department === dept);
@@ -1686,31 +1684,28 @@ export default function AdminDashboard() {
                               <button
                                 key={b.bedId}
                                 onClick={() => setSelectedBed(b)}
-                                className={`border p-4 rounded-lg text-left transition-all cursor-pointer ${
-                                  selectedBed?.bedId === b.bedId
+                                className={`border p-4 rounded-lg text-left transition-all cursor-pointer ${selectedBed?.bedId === b.bedId
                                     ? 'ring-2 ring-primary ring-offset-2 scale-[1.02] shadow-md border-primary'
                                     : ''
-                                } ${
-                                  b.status === 'OCCUPIED' 
+                                  } ${b.status === 'OCCUPIED'
                                     ? 'bg-red-50/40 border-[#cf2d56] text-ink'
                                     : b.status === 'CLEANING'
-                                    ? 'bg-yellow-50/40 border-timeline-done text-ink'
-                                    : b.status === 'UNAVAILABLE'
-                                    ? 'bg-gray-100/70 border-gray-300 text-gray-400 opacity-60'
-                                    : 'bg-canvas border-hairline hover:border-hairline-strong text-ink'
-                                }`}
+                                      ? 'bg-yellow-50/40 border-timeline-done text-ink'
+                                      : b.status === 'UNAVAILABLE'
+                                        ? 'bg-gray-100/70 border-gray-300 text-gray-400 opacity-60'
+                                        : 'bg-canvas border-hairline hover:border-hairline-strong text-ink'
+                                  }`}
                                 style={{ borderRadius: '11px' }}
                               >
                                 <span className="text-xs font-semibold block font-mono">{b.bedId}</span>
-                                <span className={`text-[9px] uppercase font-bold mt-1.5 inline-block px-2 py-0.5 rounded-full ${
-                                  b.status === 'OCCUPIED'
+                                <span className={`text-[9px] uppercase font-bold mt-1.5 inline-block px-2 py-0.5 rounded-full ${b.status === 'OCCUPIED'
                                     ? 'bg-red-100 text-[#cf2d56]'
                                     : b.status === 'CLEANING'
-                                    ? 'bg-yellow-100 text-timeline-done'
-                                    : b.status === 'UNAVAILABLE'
-                                    ? 'bg-gray-200 text-gray-500'
-                                    : 'bg-green-100 text-[#1f8a65]'
-                                }`}>
+                                      ? 'bg-yellow-100 text-timeline-done'
+                                      : b.status === 'UNAVAILABLE'
+                                        ? 'bg-gray-200 text-gray-500'
+                                        : 'bg-green-100 text-[#1f8a65]'
+                                  }`}>
                                   {b.status}
                                 </span>
                                 {b.status === 'OCCUPIED' && (
@@ -1728,10 +1723,10 @@ export default function AdminDashboard() {
                 {/* Right Column: Admission allocation form */}
                 <div className="space-y-6">
                   <h3 className="text-xs text-ink-muted-48 tracking-widest uppercase font-semibold">Active Ward Assignment</h3>
-                  
+
                   {selectedBed ? (
                     <div className="space-y-6">
-                      <div 
+                      <div
                         className="bg-canvas border border-hairline p-6"
                         style={{ borderRadius: '18px' }}
                       >
@@ -1750,7 +1745,7 @@ export default function AdminDashboard() {
                             </button>
                           )}
                         </div>
-                        
+
                         {selectedBed.status === 'OCCUPIED' ? (
                           <div className="space-y-4">
                             <div className="text-xs">
@@ -1837,7 +1832,7 @@ export default function AdminDashboard() {
                                     ))}
                                 </select>
                               </div>
-                              
+
                               <button
                                 type="submit"
                                 className="w-full bg-primary hover:bg-primary-focus text-canvas text-xs font-semibold py-3 rounded-full transition-colors uppercase cursor-pointer"
@@ -1867,7 +1862,7 @@ export default function AdminDashboard() {
                       </div>
                     </div>
                   ) : (
-                    <div 
+                    <div
                       className="bg-canvas border border-dashed border-hairline p-6 text-center text-ink-muted-48 text-xs"
                       style={{ borderRadius: '18px' }}
                     >
@@ -1876,7 +1871,7 @@ export default function AdminDashboard() {
                   )}
 
                   {/* Register New Bed Location Form */}
-                  <div 
+                  <div
                     className="bg-canvas border border-hairline p-6 mt-6"
                     style={{ borderRadius: '18px' }}
                   >
@@ -1937,14 +1932,14 @@ export default function AdminDashboard() {
           {activeTab === 'doctors' && (
             <div className="space-y-8">
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                
+
                 {/* Doctor Directory List Table */}
-                <div 
+                <div
                   className="lg:col-span-2 bg-canvas border border-hairline p-6"
                   style={{ borderRadius: '18px' }}
                 >
                   <h3 className="text-xs text-ink-muted-48 tracking-widest uppercase mb-6 font-semibold font-sans">Clinical Consultants Directory</h3>
-                  
+
                   {doctors.length === 0 ? (
                     <div className="text-xs text-ink-muted-48 py-12 text-center">No clinical doctors registered.</div>
                   ) : (
@@ -1971,9 +1966,8 @@ export default function AdminDashboard() {
                               <td className="py-4 text-ink-muted-85">{d.specialty}</td>
                               <td className="py-4 text-ink-muted-85 uppercase font-semibold text-[10px]">{d.department || 'GENERAL'}</td>
                               <td className="py-4">
-                                <span className={`text-[8px] uppercase font-bold px-2 py-0.5 rounded-full ${
-                                  d.status === 'ACTIVE' ? 'bg-green-100 text-[#1f8a65]' : 'bg-gray-100 text-gray-500'
-                                }`}>
+                                <span className={`text-[8px] uppercase font-bold px-2 py-0.5 rounded-full ${d.status === 'ACTIVE' ? 'bg-green-100 text-[#1f8a65]' : 'bg-gray-100 text-gray-500'
+                                  }`}>
                                   {d.status}
                                 </span>
                               </td>
@@ -1994,7 +1988,7 @@ export default function AdminDashboard() {
                 </div>
 
                 {/* Register New Doctor Form */}
-                <div 
+                <div
                   className="bg-canvas border border-hairline p-6"
                   style={{ borderRadius: '18px' }}
                 >
@@ -2069,14 +2063,14 @@ export default function AdminDashboard() {
           {activeTab === 'ambulance' && (
             <div className="space-y-8">
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                
+
                 {/* Left Area: Emergency Requests list */}
-                <div 
+                <div
                   className="lg:col-span-2 bg-canvas border border-hairline p-6"
                   style={{ borderRadius: '18px' }}
                 >
                   <h3 className="text-xs text-ink-muted-48 tracking-widest uppercase mb-4 font-semibold font-sans">Emergency Dispatch Logs Queue</h3>
-                  
+
                   {ambulanceRequests.length === 0 ? (
                     <div className="text-xs text-ink-muted-48 py-12 text-center">No ambulance requests registered.</div>
                   ) : (
@@ -2121,9 +2115,8 @@ export default function AdminDashboard() {
                                   )}
                                 </td>
                                 <td className="py-4">
-                                  <span className={`text-[9px] uppercase font-semibold px-2 py-0.5 rounded-full ${
-                                    isCompleted ? 'bg-green-100 text-[#1f8a65]' : 'bg-red-50 text-[#cf2d56] border border-red-200'
-                                  }`}>
+                                  <span className={`text-[9px] uppercase font-semibold px-2 py-0.5 rounded-full ${isCompleted ? 'bg-green-100 text-[#1f8a65]' : 'bg-red-50 text-[#cf2d56] border border-red-200'
+                                    }`}>
                                     {a.status}
                                   </span>
                                 </td>
@@ -2143,7 +2136,7 @@ export default function AdminDashboard() {
                                           </option>
                                         ))}
                                       </select>
-                                      <button 
+                                      <button
                                         onClick={() => handleAmbulanceStatus(a.requestId, 'ASSIGNED', dispatchVehicles[a.requestId])}
                                         disabled={!dispatchVehicles[a.requestId]}
                                         className="text-[9px] font-bold bg-primary text-canvas px-3 py-1.5 rounded-full hover:bg-primary-focus cursor-pointer disabled:opacity-50"
@@ -2154,7 +2147,7 @@ export default function AdminDashboard() {
                                     </div>
                                   )}
                                   {isAssigned && (
-                                    <button 
+                                    <button
                                       onClick={() => handleAmbulanceStatus(a.requestId, 'EN_ROUTE')}
                                       className="text-[9px] font-bold bg-ink text-canvas px-3 py-1.5 rounded-full hover:bg-ink-muted-80 cursor-pointer"
                                       style={{ borderRadius: '20px' }}
@@ -2163,7 +2156,7 @@ export default function AdminDashboard() {
                                     </button>
                                   )}
                                   {isEnRoute && (
-                                    <button 
+                                    <button
                                       onClick={() => handleAmbulanceStatus(a.requestId, 'ARRIVED')}
                                       className="text-[9px] font-bold bg-ink text-canvas px-3 py-1.5 rounded-full hover:bg-ink-muted-80 cursor-pointer"
                                       style={{ borderRadius: '20px' }}
@@ -2172,7 +2165,7 @@ export default function AdminDashboard() {
                                     </button>
                                   )}
                                   {isArrived && (
-                                    <button 
+                                    <button
                                       onClick={() => handleAmbulanceStatus(a.requestId, 'COMPLETED')}
                                       className="text-[9px] font-bold bg-primary text-canvas px-3 py-1.5 rounded-full hover:bg-primary-focus cursor-pointer"
                                       style={{ borderRadius: '20px' }}
@@ -2196,7 +2189,7 @@ export default function AdminDashboard() {
                 {/* Right Area: Registered vehicles & Register vehicle form */}
                 <div className="space-y-6">
                   {/* Fleet registry list */}
-                  <div 
+                  <div
                     className="bg-canvas border border-hairline p-5"
                     style={{ borderRadius: '18px' }}
                   >
@@ -2207,9 +2200,8 @@ export default function AdminDashboard() {
                           <div>
                             <div className="font-semibold text-ink">{v.plateNumber}</div>
                             <div className="text-[10px] text-ink-muted-48 mt-0.5">Driver: {v.driverName} ({v.driverPhone})</div>
-                            <span className={`text-[8px] uppercase font-bold px-1.5 py-0.5 rounded-full mt-1.5 inline-block ${
-                              v.status === 'AVAILABLE' ? 'bg-green-100 text-[#1f8a65]' : v.status === 'DISPATCHED' ? 'bg-red-100 text-[#cf2d56]' : 'bg-gray-100 text-gray-500'
-                            }`}>
+                            <span className={`text-[8px] uppercase font-bold px-1.5 py-0.5 rounded-full mt-1.5 inline-block ${v.status === 'AVAILABLE' ? 'bg-green-100 text-[#1f8a65]' : v.status === 'DISPATCHED' ? 'bg-red-100 text-[#cf2d56]' : 'bg-gray-100 text-gray-500'
+                              }`}>
                               {v.status}
                             </span>
                           </div>
@@ -2230,7 +2222,7 @@ export default function AdminDashboard() {
                   </div>
 
                   {/* Register new vehicle form */}
-                  <div 
+                  <div
                     className="bg-canvas border border-hairline p-5"
                     style={{ borderRadius: '18px' }}
                   >
@@ -2285,14 +2277,14 @@ export default function AdminDashboard() {
           {activeTab === 'blood' && (
             <div className="space-y-8">
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                
+
                 {/* Stock List Table */}
-                <div 
+                <div
                   className="lg:col-span-2 bg-canvas border border-hairline p-6"
                   style={{ borderRadius: '18px' }}
                 >
                   <h3 className="text-xs text-ink-muted-48 tracking-widest uppercase mb-6 font-semibold font-sans">Inventory Blood Group Storage</h3>
-                  
+
                   <div className="overflow-x-auto">
                     <table className="w-full text-left border-collapse text-xs">
                       <thead>
@@ -2319,9 +2311,8 @@ export default function AdminDashboard() {
                                 {b.unitsReserved} Units
                               </td>
                               <td className="py-3.5">
-                                <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[9px] uppercase font-bold tracking-wider ${
-                                  isCritical ? 'bg-red-100 text-[#cf2d56]' : 'bg-green-100 text-[#1f8a65]'
-                                }`}>
+                                <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[9px] uppercase font-bold tracking-wider ${isCritical ? 'bg-red-100 text-[#cf2d56]' : 'bg-green-100 text-[#1f8a65]'
+                                  }`}>
                                   {isCritical ? 'CRITICAL SHORTAGE' : 'STABLE STOCK'}
                                 </span>
                               </td>
@@ -2351,12 +2342,12 @@ export default function AdminDashboard() {
                 </div>
 
                 {/* Trigger request & outreach */}
-                <div 
+                <div
                   className="bg-canvas border border-hairline p-6 space-y-6"
                   style={{ borderRadius: '18px' }}
                 >
                   <h3 className="text-xs text-ink-muted-48 tracking-widest uppercase font-semibold">Trigger Emergency Blood Check</h3>
-                  
+
                   <form onSubmit={handleBloodRequest} className="space-y-4 text-xs">
                     <div>
                       <label className="block text-ink uppercase mb-1 font-semibold text-[10px]">Required Blood Group</label>
@@ -2375,7 +2366,7 @@ export default function AdminDashboard() {
                     </div>
                     <div>
                       <label className="block text-ink uppercase mb-1 font-semibold text-[10px]">Required Units Quantity</label>
-                      <input 
+                      <input
                         type="number" min="1" required value={bloodReq.units}
                         onChange={e => setBloodReq({ ...bloodReq, units: parseInt(e.target.value) || 1 })}
                         className="w-full text-xs px-3 py-2 rounded-full border border-hairline bg-canvas"
@@ -2397,7 +2388,7 @@ export default function AdminDashboard() {
                         <AlertTriangle size={12} /> Matching Consenting Donors
                       </h4>
                       <p className="text-[11px] text-ink-muted-48 leading-relaxed">Donors who have consented to emergency outreach dispatches:</p>
-                      
+
                       <div className="space-y-2 max-h-48 overflow-y-auto">
                         {eligibleDonors.map(d => (
                           <div key={d.donorId} className="bg-canvas-parchment border border-hairline rounded-[11px] p-3 text-xs">
@@ -2431,14 +2422,14 @@ export default function AdminDashboard() {
           {activeTab === 'inventory' && (
             <div className="space-y-8">
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                
+
                 {/* Supplies table */}
-                <div 
+                <div
                   className="lg:col-span-2 bg-canvas border border-hairline p-6"
                   style={{ borderRadius: '18px' }}
                 >
                   <h3 className="text-xs text-ink-muted-48 tracking-widest uppercase mb-4 font-semibold">Stock Ledger List</h3>
-                  
+
                   <div className="overflow-x-auto">
                     <table className="w-full text-left border-collapse text-xs">
                       <thead>
@@ -2509,12 +2500,12 @@ export default function AdminDashboard() {
                 {/* Log stock movement & Add Catalog Product */}
                 <div className="space-y-6">
                   {/* Log stock movement */}
-                  <div 
+                  <div
                     className="bg-canvas border border-hairline p-6"
                     style={{ borderRadius: '18px' }}
                   >
                     <h3 className="text-xs text-ink-muted-48 tracking-widest uppercase mb-6 font-semibold">Log Stock Movement</h3>
-                    
+
                     <form onSubmit={handleInventoryMovement} className="space-y-4 text-xs">
                       <div>
                         <label className="block text-ink uppercase mb-1 font-semibold text-[10px]">Select Product SKU</label>
@@ -2533,7 +2524,7 @@ export default function AdminDashboard() {
                           ))}
                         </select>
                       </div>
-                      
+
                       <div className="grid grid-cols-2 gap-2">
                         <div>
                           <label className="block text-ink uppercase mb-1 font-semibold text-[10px]">Log Action</label>
@@ -2550,7 +2541,7 @@ export default function AdminDashboard() {
                         </div>
                         <div>
                           <label className="block text-ink uppercase mb-1 font-semibold text-[10px]">Units Qty</label>
-                          <input 
+                          <input
                             type="number" min="1" required value={invMove.qty}
                             onChange={e => setInvMove({ ...invMove, qty: parseInt(e.target.value) || 1 })}
                             className="w-full text-xs px-3 py-2 rounded-full border border-hairline bg-canvas"
@@ -2561,7 +2552,7 @@ export default function AdminDashboard() {
 
                       <div>
                         <label className="block text-ink uppercase mb-1 font-semibold text-[10px]">Notes / Batch Code</label>
-                        <input 
+                        <input
                           type="text" value={invMove.notes}
                           onChange={e => setInvMove({ ...invMove, notes: e.target.value })}
                           className="w-full text-xs px-3 py-2 rounded-full border border-hairline bg-canvas"
@@ -2581,7 +2572,7 @@ export default function AdminDashboard() {
                   </div>
 
                   {/* Add Catalog Item */}
-                  <div 
+                  <div
                     className="bg-canvas border border-hairline p-6"
                     style={{ borderRadius: '18px' }}
                   >
@@ -2693,14 +2684,14 @@ export default function AdminDashboard() {
           {activeTab === 'surgeries' && (
             <div className="space-y-8">
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                
+
                 {/* Surgeries grid list */}
-                <div 
+                <div
                   className="lg:col-span-2 bg-canvas border border-hairline p-6"
                   style={{ borderRadius: '18px' }}
                 >
                   <h3 className="text-xs text-ink-muted-48 tracking-widest uppercase mb-4 font-semibold">Active Surgery Allocations</h3>
-                  
+
                   {surgeries.length === 0 ? (
                     <div className="text-xs text-ink-muted-48 py-12 text-center">No surgeries booked.</div>
                   ) : (
@@ -2727,12 +2718,12 @@ export default function AdminDashboard() {
                 </div>
 
                 {/* Booking Form */}
-                <div 
+                <div
                   className="bg-canvas border border-hairline p-6"
                   style={{ borderRadius: '18px' }}
                 >
                   <h3 className="text-xs text-ink-muted-48 tracking-widest uppercase mb-6 font-semibold">Book Operating Theatre</h3>
-                  
+
                   <form onSubmit={handleRegisterSurgery} className="space-y-4">
                     <div>
                       <label className="block text-xs text-ink uppercase mb-1 font-semibold">Select Patient</label>
@@ -2753,7 +2744,7 @@ export default function AdminDashboard() {
 
                     <div>
                       <label className="block text-xs text-ink uppercase mb-1 font-semibold">Procedure Name</label>
-                      <input 
+                      <input
                         type="text" required value={surgForm.procedure}
                         onChange={e => setSurgForm({ ...surgForm, procedure: e.target.value })}
                         className="w-full text-sm" placeholder="e.g. Laparoscopic Appendectomy"
@@ -2790,7 +2781,7 @@ export default function AdminDashboard() {
                       </div>
                       <div>
                         <label className="block text-xs text-ink uppercase mb-1 font-semibold">Schedule Time</label>
-                        <input 
+                        <input
                           type="datetime-local" required value={surgForm.time}
                           onChange={e => setSurgForm({ ...surgForm, time: e.target.value })}
                           className="w-full text-xs px-3 py-2 rounded-full border border-hairline bg-canvas"
@@ -2818,7 +2809,7 @@ export default function AdminDashboard() {
       {/* Premium Custom Confirmation Modal */}
       {confirmModal.isOpen && (
         <div className="fixed inset-0 bg-[#000000]/60 z-[100] flex justify-center items-center backdrop-blur-sm">
-          <div 
+          <div
             className="bg-white border border-[#e5e5e5] p-6 max-w-sm w-full mx-4 space-y-6 shadow-2xl"
             style={{ borderRadius: '20px' }}
           >
@@ -2852,7 +2843,7 @@ export default function AdminDashboard() {
       {/* General Blood Donors Log Modal */}
       {isDonorModalOpen && (
         <div className="fixed inset-0 bg-[#000000]/60 z-[90] flex justify-center items-center backdrop-blur-sm">
-          <div 
+          <div
             className="bg-white border border-[#e5e5e5] p-6 max-w-2xl w-full mx-4 space-y-6 shadow-2xl flex flex-col max-h-[90vh]"
             style={{ borderRadius: '20px' }}
           >
@@ -2861,7 +2852,7 @@ export default function AdminDashboard() {
                 <h3 className="text-xs uppercase tracking-widest text-ink-muted-48 font-bold">Blood Bank Module</h3>
                 <h2 className="text-base font-semibold text-ink">General Blood Donors Log</h2>
               </div>
-              <button 
+              <button
                 onClick={() => setIsDonorModalOpen(false)}
                 className="text-xs text-ink-muted-48 hover:text-ink border border-hairline hover:border-hairline-strong px-3 py-1.5 rounded-full cursor-pointer font-bold uppercase transition-all bg-canvas-parchment"
                 style={{ borderRadius: '20px' }}
@@ -2874,7 +2865,7 @@ export default function AdminDashboard() {
             <form onSubmit={handleAddDonor} className="bg-canvas-parchment border border-hairline p-4 rounded-[14px] grid grid-cols-1 md:grid-cols-4 gap-3 items-end shrink-0 text-xs">
               <div className="md:col-span-2">
                 <label className="block text-[10px] text-ink uppercase mb-1 font-bold">Full Name</label>
-                <input 
+                <input
                   type="text" required placeholder="John Doe"
                   value={newDonorForm.name}
                   onChange={e => setNewDonorForm({ ...newDonorForm, name: e.target.value })}
@@ -2884,7 +2875,7 @@ export default function AdminDashboard() {
               </div>
               <div>
                 <label className="block text-[10px] text-ink uppercase mb-1 font-bold">Blood Group</label>
-                <select 
+                <select
                   value={newDonorForm.bloodGroup}
                   onChange={e => setNewDonorForm({ ...newDonorForm, bloodGroup: e.target.value })}
                   className="w-full text-xs h-9 bg-canvas border border-hairline rounded-full px-2 outline-none"
@@ -2901,7 +2892,7 @@ export default function AdminDashboard() {
                   <div className="bg-canvas-card border-r border-hairline px-3.5 py-2 text-xs text-ink-muted-48 font-bold flex items-center shrink-0">
                     +91
                   </div>
-                  <input 
+                  <input
                     type="text" required placeholder="9876543210"
                     value={newDonorForm.phone}
                     onChange={e => setNewDonorForm({ ...newDonorForm, phone: e.target.value })}
@@ -2911,7 +2902,7 @@ export default function AdminDashboard() {
               </div>
               <div className="md:col-span-2">
                 <label className="block text-[10px] text-ink uppercase mb-1 font-bold">Location (City/State)</label>
-                <input 
+                <input
                   type="text" placeholder="Noida, UP"
                   value={newDonorForm.location}
                   onChange={e => setNewDonorForm({ ...newDonorForm, location: e.target.value })}
@@ -2920,7 +2911,7 @@ export default function AdminDashboard() {
                 />
               </div>
               <div className="md:col-span-2">
-                <button 
+                <button
                   type="submit"
                   className="w-full bg-primary hover:bg-primary-focus text-canvas text-xs font-semibold py-2 rounded-full transition-colors uppercase cursor-pointer"
                   style={{ borderRadius: '20px' }}
@@ -2957,7 +2948,7 @@ export default function AdminDashboard() {
                         <div className="text-[9px] text-ink-muted-48 mt-0.5">{d.location || 'Hospital Area'}</div>
                       </td>
                       <td className="py-2.5 text-right">
-                        <button 
+                        <button
                           onClick={() => handleDeleteDonor(d.donorId, d.name)}
                           className="text-[10px] text-[#cf2d56] hover:text-[#b02244] border border-hairline hover:border-hairline-strong px-2.5 py-1 rounded-full cursor-pointer font-bold uppercase transition-all bg-canvas-parchment"
                           style={{ borderRadius: '20px' }}
@@ -2981,15 +2972,15 @@ export default function AdminDashboard() {
 
       {/* Full-Screen Super-Sized QR Code Zoom Modal */}
       {showQrZoom && (
-        <div 
+        <div
           className="fixed inset-0 bg-black/80 z-[100] flex justify-center items-center p-6 backdrop-blur-md cursor-pointer"
           onClick={() => setShowQrZoom(null)}
         >
-          <div 
+          <div
             className="bg-white p-8 rounded-3xl flex flex-col items-center max-w-md w-full shadow-2xl relative border border-hairline"
             onClick={e => e.stopPropagation()}
           >
-            <button 
+            <button
               onClick={() => setShowQrZoom(null)}
               className="absolute top-4 right-4 text-ink-muted-48 hover:text-ink text-xs font-bold bg-canvas-parchment border border-hairline px-3.5 py-1.5 rounded-full cursor-pointer"
             >

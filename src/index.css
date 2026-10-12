@@ -9,35 +9,39 @@
   --color-surface-tile-3: #252527;
   --color-surface-black: #000000;
   --color-surface-chip-translucent: rgba(210, 210, 215, 0.64);
-  
+
   --color-primary: #0066cc;
   --color-primary-focus: #0071e3;
   --color-primary-on-dark: #2997ff;
-  
+
   --color-ink: #1d1d1f;
   --color-body: #1d1d1f;
   --color-body-on-dark: #ffffff;
   --color-body-muted: #cccccc;
-  
+
   --color-divider-soft: #f0f0f0;
   --color-hairline: #e0e0e0;
-  
+
   --font-sans: "SF Pro Text", system-ui, -apple-system, BlinkMacSystemFont, "Inter", sans-serif;
   --font-display: "SF Pro Display", system-ui, -apple-system, BlinkMacSystemFont, "Inter", sans-serif;
 }
 
 /* Global typography scaling & UI layout alignment */
 html {
-  font-size: 17.5px; /* Slightly increased root font size for overall UI text scale */
+  font-size: 17.5px;
+  /* Slightly increased root font size for overall UI text scale */
 }
 
 /* Base resets & styling */
 @layer base {
   body {
-    background-color: #f5f5f7; /* canvas-parchment */
-    color: #1d1d1f; /* body */
+    background-color: #f5f5f7;
+    /* canvas-parchment */
+    color: #1d1d1f;
+    /* body */
     font-family: "SF Pro Text", system-ui, -apple-system, BlinkMacSystemFont, "Inter", sans-serif;
-    font-size: 1.05rem; /* Slightly larger base text */
+    font-size: 1.05rem;
+    /* Slightly larger base text */
     line-height: 1.5;
     letter-spacing: -0.015em;
     margin: 0;
@@ -46,8 +50,14 @@ html {
     -webkit-font-smoothing: antialiased;
   }
 
-  h1, h2, h3, h4, h5, h6 {
-    color: #1d1d1f; /* ink */
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    color: #1d1d1f;
+    /* ink */
     font-family: "SF Pro Display", system-ui, -apple-system, BlinkMacSystemFont, "Inter", sans-serif;
     font-weight: 600;
     letter-spacing: -0.025em;
@@ -57,7 +67,8 @@ html {
     letter-spacing: -0.3px;
   }
 
-  code, pre {
+  code,
+  pre {
     font-family: 'JetBrains Mono', 'Fira Code', monospace;
     font-size: 14.5px;
   }
@@ -74,7 +85,9 @@ html {
   }
 
   /* Apple Input Styles with balanced padding and line height */
-  input, select, textarea {
+  input,
+  select,
+  textarea {
     background-color: #ffffff;
     border: 1px solid #e0e0e0;
     color: #1d1d1f;
@@ -88,20 +101,22 @@ html {
     vertical-align: middle;
   }
 
-  input:focus, select:focus, textarea:focus {
+  input:focus,
+  select:focus,
+  textarea:focus {
     border-color: #0066cc;
     box-shadow: 0 0 0 2px rgba(0, 102, 204, 0.15);
   }
 }
 
 /* Apple Active Scale Micro-interaction */
-button, 
+button,
 a.btn,
 .interactive-chip {
   transition: transform 0.12s cubic-bezier(0.25, 1, 0.5, 1), background-color 0.12s ease;
 }
 
-button:active, 
+button:active,
 a.btn:active,
 .interactive-chip:active {
   transform: scale(0.96);
@@ -112,13 +127,16 @@ a.btn:active,
   width: 6px;
   height: 6px;
 }
+
 ::-webkit-scrollbar-track {
   background: #f5f5f7;
 }
+
 ::-webkit-scrollbar-thumb {
   background: #d2d2d7;
   border-radius: 3px;
 }
+
 ::-webkit-scrollbar-thumb:hover {
   background: #7a7a7a;
 }
@@ -167,4 +185,3 @@ a.btn:active,
   min-height: calc(4rem + env(safe-area-inset-bottom, 0px));
   box-sizing: border-box;
 }
-

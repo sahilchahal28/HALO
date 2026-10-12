@@ -18,7 +18,7 @@ export function AppProvider({ children }) {
   const [language, setLanguage] = useState('en'); // 'en' or 'hi'
   const wasOfflineRef = useRef(false);
   const [isOffline, setIsOffline] = useState(typeof navigator !== 'undefined' ? !navigator.onLine : false);
-  
+
   // Real-time synced state with localStorage fallbacks for instant reloading
   const [patients, setPatients] = useState(() => {
     try {
@@ -79,7 +79,7 @@ export function AppProvider({ children }) {
       return saved ? JSON.parse(saved) : [];
     } catch (_) { return []; }
   });
-  
+
   // Toast Notification System (Strictly capped at maximum 3 visible toasts everywhere)
   const [toasts, setToasts] = useState([]);
   const lastToastTimeRef = useRef({});
@@ -139,7 +139,7 @@ export function AppProvider({ children }) {
         try {
           localStorage.setItem('halo_token', adminToken);
           localStorage.setItem('halo_user', JSON.stringify(adminUser));
-        } catch (_) {}
+        } catch (_) { }
         setLoading(false);
         return;
       }
@@ -156,13 +156,13 @@ export function AppProvider({ children }) {
           try {
             localStorage.setItem('halo_token', session.token);
             localStorage.setItem('halo_user', JSON.stringify(session.user));
-          } catch (_) {}
+          } catch (_) { }
         } else if (!cancelled) {
           // Server explicitly rejected the session (invalid/expired/ghost)
           try {
             localStorage.removeItem('halo_token');
             localStorage.removeItem('halo_user');
-          } catch (_) {}
+          } catch (_) { }
           setToken(null);
           setUser(null);
         }
@@ -197,7 +197,7 @@ export function AppProvider({ children }) {
           api.post(endpoint, options.body)
         );
         if (flushed > 0) addToast(`${flushed} offline change(s) synced successfully`, 'success');
-      } catch (_) {}
+      } catch (_) { }
     };
     const goOffline = () => setIsOffline(true);
 
@@ -222,7 +222,7 @@ export function AppProvider({ children }) {
         try {
           localStorage.setItem('halo_token', adminToken);
           localStorage.setItem('halo_user', JSON.stringify(adminUser));
-        } catch (_) {}
+        } catch (_) { }
         addToast('Signed in as Admin', 'success');
         setLoading(false);
         return adminUser;
@@ -237,7 +237,7 @@ export function AppProvider({ children }) {
 
       // Remember this device's PWA role (used by the standalone boot redirect)
       if (role === 'DOCTOR' || role === 'PATIENT') {
-        try { localStorage.setItem('halo_last_role', role); } catch (_) {}
+        try { localStorage.setItem('halo_last_role', role); } catch (_) { }
       }
 
       setToken(res.token);
@@ -246,7 +246,7 @@ export function AppProvider({ children }) {
       try {
         localStorage.setItem('halo_token', res.token);
         localStorage.setItem('halo_user', JSON.stringify(res.user));
-      } catch (_) {}
+      } catch (_) { }
 
       addToast(`Signed in successfully`, 'success');
       setLoading(false);
@@ -268,15 +268,15 @@ export function AppProvider({ children }) {
     try {
       localStorage.removeItem('halo_token');
       localStorage.removeItem('halo_user');
-    } catch (_) {}
+    } catch (_) { }
 
     // Clear the httpOnly refresh cookie server-side (best effort)
-    try { await api.post('/auth/logout'); } catch (_) {}
+    try { await api.post('/auth/logout'); } catch (_) { }
   };
 
   const exitApp = () => {
     const isStandalone = (typeof window !== 'undefined') && (
-      window.navigator.standalone || 
+      window.navigator.standalone ||
       window.matchMedia('(display-mode: standalone)').matches
     );
 
@@ -314,7 +314,7 @@ export function AppProvider({ children }) {
       try {
         const dcs = await api.get('/doctors');
         setDoctors(prev => (JSON.stringify(prev) !== JSON.stringify(dcs) ? dcs : prev));
-        try { localStorage.setItem('halo_doctors', JSON.stringify(dcs)); } catch (_) {}
+        try { localStorage.setItem('halo_doctors', JSON.stringify(dcs)); } catch (_) { }
 
         if (user.role === 'ADMIN') {
           const [pts, bd, amb, bb, inv, surg, veh, dnr] = await Promise.all([
@@ -345,7 +345,7 @@ export function AppProvider({ children }) {
             localStorage.setItem('halo_surgeries', JSON.stringify(surg));
             localStorage.setItem('halo_ambulance_vehicles', JSON.stringify(veh));
             localStorage.setItem('halo_donors_list', JSON.stringify(dnr));
-          } catch (_) {}
+          } catch (_) { }
         } else if (user.role === 'DOCTOR') {
           const [notes, surg, amb, pts] = await Promise.all([
             api.get(`/notifications/${user.id}`),
@@ -353,7 +353,7 @@ export function AppProvider({ children }) {
             api.get('/ambulance'),
             api.get('/patients')
           ]);
-          
+
           // Check if there are new unread notifications to alert the doctor
           const newUnread = notes.filter(n => n.status === 'UNREAD');
           if (newUnread.length > doctorNotifications.filter(n => n.status === 'UNREAD').length) {
@@ -374,7 +374,7 @@ export function AppProvider({ children }) {
           setPatientProfile(prev => (JSON.stringify(prev) !== JSON.stringify(profile) ? profile : prev));
           setPatientDocuments(prev => (JSON.stringify(prev) !== JSON.stringify(docs || []) ? (docs || []) : prev));
           const active = eps.find(e => e.status === 'ACTIVE');
-          
+
           // If patient was outpatient but is now assigned a bed, show toast!
           if (active && patientEpisode) {
             if (active.bedAssignment?.bedId && !patientEpisode.bedAssignment?.bedId) {
@@ -438,7 +438,7 @@ export function AppProvider({ children }) {
         setPatientDocuments(docs || []);
         setDoctors(dcs || []);
       }
-    } catch (_) {}
+    } catch (_) { }
   };
 
   // Real-time sync: server broadcasts 'sync' after every successful mutation
@@ -475,7 +475,7 @@ export function AppProvider({ children }) {
       addToast,
       toasts,
       wasOfflineRef,
-      
+
       // Synced states & setters for optimistic instant UI updates
       patients,
       setPatients,
@@ -503,7 +503,7 @@ export function AppProvider({ children }) {
       setDoctors,
       donorsList,
       setDonorsList,
-      
+
       // Force refresh trigger helper
       refreshData
     }}>
@@ -522,15 +522,14 @@ export function AppProvider({ children }) {
         {toasts.slice(-3).map(toast => (
           <div
             key={toast.id}
-            className={`p-3.5 px-4 rounded-xl shadow-lg border text-xs font-semibold tracking-tight pointer-events-auto flex items-center justify-between gap-3 transition-all duration-200 ${
-              toast.type === 'success' 
-                ? 'bg-[#edf7f2] border-[#22c55e]/40 text-[#166534]' 
+            className={`p-3.5 px-4 rounded-xl shadow-lg border text-xs font-semibold tracking-tight pointer-events-auto flex items-center justify-between gap-3 transition-all duration-200 ${toast.type === 'success'
+                ? 'bg-[#edf7f2] border-[#22c55e]/40 text-[#166534]'
                 : toast.type === 'error'
-                ? 'bg-[#fef2f2] border-[#ef4444]/40 text-[#991b1b]'
-                : toast.type === 'warning'
-                ? 'bg-[#fffbe0] border-[#eab308]/40 text-[#854d0e]'
-                : 'bg-white border-[#e5e5e5] text-[#1c1c1c]'
-            }`}
+                  ? 'bg-[#fef2f2] border-[#ef4444]/40 text-[#991b1b]'
+                  : toast.type === 'warning'
+                    ? 'bg-[#fffbe0] border-[#eab308]/40 text-[#854d0e]'
+                    : 'bg-white border-[#e5e5e5] text-[#1c1c1c]'
+              }`}
           >
             <div className="flex items-center gap-2.5 min-w-0">
               {toast.type === 'error' && <span className="w-2 h-2 rounded-full bg-[#ef4444] shrink-0" />}

@@ -17,17 +17,17 @@ export default function RolePortal() {
           </span>
           <span className="text-ink text-sm font-semibold tracking-tight">HALO SYSTEM</span>
         </div>
-        
+
         {/* Language Switcher */}
         <div className="flex gap-2 text-xs">
-          <button 
-            onClick={() => setLanguage('en')} 
+          <button
+            onClick={() => setLanguage('en')}
             className={`px-3 py-1 border border-hairline rounded-full cursor-pointer transition-all ${language === 'en' ? 'bg-ink text-canvas border-ink font-semibold' : 'text-ink bg-canvas hover:border-hairline-strong'}`}
           >
             ENGLISH
           </button>
-          <button 
-            onClick={() => setLanguage('hi')} 
+          <button
+            onClick={() => setLanguage('hi')}
             className={`px-3 py-1 border border-hairline rounded-full cursor-pointer transition-all ${language === 'hi' ? 'bg-ink text-canvas border-ink font-semibold' : 'text-ink bg-canvas hover:border-hairline-strong'}`}
           >
             हिंदी
@@ -51,7 +51,7 @@ export default function RolePortal() {
             {t('selectRole')}
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            
+
             {/* ADMIN CARD */}
             <button
               onClick={() => navigate('/admin')}
@@ -73,7 +73,7 @@ export default function RolePortal() {
 
             {/* DOCTOR CARD */}
             <button
-              onClick={() => { try { localStorage.setItem('halo_last_role', 'DOCTOR'); } catch (_) {} navigate('/doctor'); }}
+              onClick={() => { try { localStorage.setItem('halo_last_role', 'DOCTOR'); } catch (_) { } navigate('/doctor'); }}
               className="bg-canvas border border-hairline hover:border-hairline-strong p-8 rounded-lg text-left transition-all duration-200 group flex flex-col justify-between h-72 cursor-pointer"
               style={{ borderRadius: '18px' }} // rounded.lg
             >
@@ -92,7 +92,7 @@ export default function RolePortal() {
 
             {/* PATIENT CARD */}
             <button
-              onClick={() => { try { localStorage.setItem('halo_last_role', 'PATIENT'); } catch (_) {} navigate('/patient'); }}
+              onClick={() => { try { localStorage.setItem('halo_last_role', 'PATIENT'); } catch (_) { } navigate('/patient'); }}
               className="bg-canvas border border-hairline hover:border-hairline-strong p-8 rounded-lg text-left transition-all duration-200 group flex flex-col justify-between h-72 cursor-pointer"
               style={{ borderRadius: '18px' }} // rounded.lg
             >
