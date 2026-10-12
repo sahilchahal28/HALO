@@ -79,11 +79,20 @@ async function startTunnel(requestedSubdomain, attempt = 1) {
       subdomain: requestedSubdomain,
     });
 
+    const expectedHost = `${requestedSubdomain}.loca.lt`;
+    if (!tunnel.url.includes(expectedHost) && attempt < 5) {
+      console.warn(`[Tunnel] loca.lt assigned alias ${tunnel.url} instead of ${expectedHost}. Reconnecting in 3s to reclaim ${requestedSubdomain}...`);
+      try { tunnel.close(); } catch (_) {}
+      await new Promise((r) => setTimeout(r, 3000));
+      return startTunnel(requestedSubdomain, attempt + 1);
+    }
+
     return tunnel;
   } catch (err) {
-    if (attempt < 3) {
-      console.log(`[Tunnel] Retry ${attempt} with fallback identifier...`);
-      return startTunnel(`${requestedSubdomain}-${Date.now().toString().slice(-4)}`, attempt + 1);
+    if (attempt < 5) {
+      console.log(`[Tunnel] Retry ${attempt} after error: ${err.message}...`);
+      await new Promise((r) => setTimeout(r, 3000));
+      return startTunnel(requestedSubdomain, attempt + 1);
     }
     throw err;
   }
@@ -161,22 +170,23 @@ async function main() {
   setInterval(async () => {
     try {
       const ok = await checkTunnelHealth(tunnel.url);
-      if (!ok && healthy) {
+      const isCorrectSubdomain = tunnel.url.includes(`${DEFAULT_SUBDOMAIN}.loca.lt`);
+      if ((!ok || !isCorrectSubdomain) && healthy) {
         healthy = false;
-        console.warn(`\n[Watchdog] Tunnel not responding (${tunnel.url}). Restarting...`);
+        console.warn(`\n[Watchdog] Tunnel not responding or incorrect subdomain (${tunnel.url}). Reconnecting...`);
         try { tunnel.close(); } catch (_) {}
         await new Promise((r) => setTimeout(r, 2500));
         tunnel = await startTunnel(DEFAULT_SUBDOMAIN);
         console.log(`[Watchdog] Tunnel restarted at: ${tunnel.url}`);
-        console.warn('[Watchdog] If this address changed, update vercel.json and redeploy.');
-      } else if (ok && !healthy) {
+        healthy = true;
+      } else if (ok && isCorrectSubdomain && !healthy) {
         healthy = true;
         console.log('[Watchdog] Tunnel health recovered.');
       }
     } catch (e) {
       console.error('[Watchdog] Health check error:', e.message);
     }
-  }, 30000);
+  }, 15000);
 
   process.on('SIGINT', () => {
     console.log('\n[HALO Tunnel] Shutting down...');

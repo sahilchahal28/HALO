@@ -57,10 +57,13 @@ function sanitizeApiBase(raw) {
 let refreshingPromise = null;
 
 export class ApiError extends Error {
-  constructor(message, status) {
+  constructor(message, status, { isTransient = false } = {}) {
     super(message);
     this.status = status;
     this.isNetworkError = status === undefined;
+    // True for 408/502/503/504 — transient upstream/tunnel errors that are
+    // not caused by the user's action and should not show an error toast.
+    this.isTransient = isTransient;
   }
 }
 
@@ -310,12 +313,16 @@ async function rawRequest(endpoint, options = {}, isRetry = false) {
     return response.json();
   }
 
-  let errorMessage = `API request failed (${response.status})`;
+  const isTransientFinal = TRANSIENT_STATUSES.has(response.status);
+  let errorMessage = isTransientFinal
+    ? `Service temporarily unavailable (${response.status}). Retrying…`
+    : `API request failed (${response.status})`;
   try {
     const errData = await response.json();
-    errorMessage = errData.message || errorMessage;
+    // Prefer server-supplied message but keep our clean label for offline SW responses
+    if (errData.message && !isTransientFinal) errorMessage = errData.message;
   } catch (_) {}
-  throw new ApiError(errorMessage, response.status);
+  throw new ApiError(errorMessage, response.status, { isTransient: isTransientFinal });
 }
 
 async function request(endpoint, options = {}) {

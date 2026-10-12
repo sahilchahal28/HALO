@@ -31,11 +31,16 @@ export default function PatientDashboard() {
 
   const handleLoginSubmit = async (e) => {
     e.preventDefault();
-    if (!loginForm.phone || !loginForm.id) return;
+    const rawPhone = (loginForm.phone || '').trim();
+    const rawId = (loginForm.id || '').trim();
+    if (!rawPhone || !rawId) return;
     setLoggingIn(true);
     try {
-      const phoneFormatted = loginForm.phone.startsWith('+') ? loginForm.phone : `+91${loginForm.phone.trim()}`;
-      await login('PATIENT', { ...loginForm, phone: phoneFormatted });
+      const digitsOnly = rawPhone.replace(/\D/g, '');
+      const phoneFormatted = rawPhone.startsWith('+')
+        ? `+${digitsOnly}`
+        : (digitsOnly.length === 10 ? `+91${digitsOnly}` : (digitsOnly.startsWith('91') ? `+${digitsOnly}` : `+91${digitsOnly}`));
+      await login('PATIENT', { phone: phoneFormatted, id: rawId });
     } catch (_) {
       // Error is already toasted by AppContext
     } finally {

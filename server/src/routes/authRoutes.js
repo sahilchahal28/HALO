@@ -60,11 +60,25 @@ router.post('/login', async (req, res, next) => {
         return res.status(401).json({ message: 'Invalid admin credentials.' });
       }
     } else if (role === 'DOCTOR') {
-      // Case-insensitive ID match so stored IDs of any casing work
+      const digits = cleanPhone.replace(/\D/g, '');
+      const last10 = digits.slice(-10);
+
+      // Case-insensitive ID match and flexible phone match (+91, without +91, spaces)
       const doctor = await Doctor.findOne({
-        phone: cleanPhone,
         status: 'ACTIVE',
-        $expr: { $eq: [{ $toUpper: '$doctorId' }, cleanId] }
+        $and: [
+          { $expr: { $eq: [{ $toUpper: '$doctorId' }, cleanId] } },
+          {
+            $or: [
+              { phone: cleanPhone },
+              ...(last10 ? [
+                { phone: `+91${last10}` },
+                { phone: last10 },
+                { phone: { $regex: `${last10}$` } }
+              ] : [])
+            ]
+          }
+        ]
       });
 
       if (!doctor) {
@@ -73,11 +87,25 @@ router.post('/login', async (req, res, next) => {
 
       payload = { sub: doctor.doctorId, role: 'DOCTOR', name: doctor.name };
     } else if (role === 'PATIENT') {
+      const digits = cleanPhone.replace(/\D/g, '');
+      const last10 = digits.slice(-10);
+
       // Allow patient to login even if their profile status is INACTIVE
-      // Case-insensitive ID match so stored IDs of any casing work
+      // Case-insensitive ID match and flexible phone match (+91, without +91, spaces)
       const patient = await Patient.findOne({
-        phone: cleanPhone,
-        $expr: { $eq: [{ $toUpper: '$patientId' }, cleanId] }
+        $and: [
+          { $expr: { $eq: [{ $toUpper: '$patientId' }, cleanId] } },
+          {
+            $or: [
+              { phone: cleanPhone },
+              ...(last10 ? [
+                { phone: `+91${last10}` },
+                { phone: last10 },
+                { phone: { $regex: `${last10}$` } }
+              ] : [])
+            ]
+          }
+        ]
       });
 
       if (!patient) {

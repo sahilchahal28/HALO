@@ -112,6 +112,20 @@ export function AppProvider({ children }) {
     }, 2500); // 2.5s auto-dismiss
   };
 
+  /**
+   * Convenience wrapper for error-catch blocks.
+   * Silently drops ApiErrors that are marked `isTransient` (503/502/504/408)
+   * — those were already retried internally and do NOT represent a real failure
+   * on the user's action. All other errors surface normally.
+   */
+  const addErrorToast = (err) => {
+    if (!err) return;
+    // Suppress transient server/tunnel blips — they auto-retry and connection is fine
+    if (err.isTransient) return;
+    addToast(err.message || 'An unexpected error occurred.', 'error');
+  };
+
+
   // Translation helper
   const t = (key) => {
     return translations[language][key] || key;
@@ -445,9 +459,21 @@ export function AppProvider({ children }) {
         }
       } catch (err) {
         console.error('Polling sync error:', err.message);
-        if (!wasOfflineRef.current) {
-          wasOfflineRef.current = true;
-          addToast('Connection lost. Please check your internet connection.', 'error');
+        // Only flag as "offline" when fetch() itself threw with no response —
+        // that is a true network failure (isNetworkError === true, status === undefined).
+        // HTTP-level errors (503, 502, 504 …) still mean the server was reached,
+        // so they must NOT trigger the "Connection lost" toast.
+        if (err.isNetworkError) {
+          if (!wasOfflineRef.current) {
+            wasOfflineRef.current = true;
+            addToast('Connection lost. Please check your internet connection.', 'error');
+          }
+        } else {
+          // Server returned an HTTP error — connectivity is alive; clear the
+          // offline flag silently so the "restored" toast fires if needed later.
+          if (wasOfflineRef.current) {
+            wasOfflineRef.current = false;
+          }
         }
       }
     };
@@ -527,6 +553,7 @@ export function AppProvider({ children }) {
       logout,
       exitApp,
       addToast,
+      addErrorToast,
       toasts,
       wasOfflineRef,
 
