@@ -2944,6 +2944,40 @@ export default function AdminDashboard() {
                       return true;
                     });
 
+                    // Sort newest surgeries to the top of the list
+                    const getSurgerySortTime = (s) => {
+                      if (s.createdAt) {
+                        const t = new Date(s.createdAt).getTime();
+                        if (!isNaN(t)) return t;
+                      }
+                      if (s._id) {
+                        const hex = typeof s._id === 'string' ? s._id : (s._id.toString ? s._id.toString() : '');
+                        if (hex && hex.length === 24) {
+                          const t = parseInt(hex.substring(0, 8), 16) * 1000;
+                          if (!isNaN(t)) return t;
+                        }
+                      }
+                      if (s.completedAt) {
+                        const t = new Date(s.completedAt).getTime();
+                        if (!isNaN(t)) return t;
+                      }
+                      if (s.cancelledAt) {
+                        const t = new Date(s.cancelledAt).getTime();
+                        if (!isNaN(t)) return t;
+                      }
+                      if (s.time) {
+                        const t = new Date(s.time).getTime();
+                        if (!isNaN(t)) return t;
+                      }
+                      if (s.scheduledAt) {
+                        const t = new Date(s.scheduledAt).getTime();
+                        if (!isNaN(t)) return t;
+                      }
+                      return 0;
+                    };
+
+                    displayed.sort((a, b) => getSurgerySortTime(b) - getSurgerySortTime(a));
+
                     return (
                       <div className="space-y-4">
                         {/* Tab Pills */}

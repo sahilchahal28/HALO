@@ -7,7 +7,7 @@ import Notification from '../models/Notification.js';
 import { logAction } from './auditService.js';
 
 export async function getSurgeries() {
-  const list = await Surgery.find({}).sort({ scheduledAt: -1, createdAt: -1 });
+  const list = await Surgery.find({}).sort({ createdAt: -1, _id: -1 });
   const enriched = await Promise.all(list.map(async (s) => {
     const doc = s.toObject();
     if (!doc.patientName || !doc.doctorName) {
