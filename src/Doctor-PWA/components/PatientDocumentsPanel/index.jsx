@@ -16,6 +16,7 @@ export default function PatientDocumentsPanel({
   patient,
   activeEpisode,
   doctorUser,
+  initialDocuments = [],
 }) {
   const { addToast } = useApp();
   const patientId = patient?.patientId || patient?.id;
@@ -34,12 +35,20 @@ export default function PatientDocumentsPanel({
     sortOrder: 'desc',
   });
 
-  // Data & Loading States
-  const [documents, setDocuments] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
+  // Data & Loading States - Initialize with initialDocuments if available for instant display
+  const [documents, setDocuments] = useState(initialDocuments);
+  const [isLoading, setIsLoading] = useState(!initialDocuments || initialDocuments.length === 0);
   const [isSyncing, setIsSyncing] = useState(false);
   const [storageInfo, setStorageInfo] = useState({ count: 0, estimatedBytes: 0, usagePercentage: 0 });
   const [actionLoadingDocId, setActionLoadingDocId] = useState(null);
+
+  // Sync initialDocuments if they update from parent
+  useEffect(() => {
+    if (initialDocuments && initialDocuments.length > 0) {
+      setDocuments(prev => (prev.length === 0 ? initialDocuments : prev));
+      setIsLoading(false);
+    }
+  }, [initialDocuments]);
 
   // Preview Modal State
   const [previewDoc, setPreviewDoc] = useState(null);
@@ -73,15 +82,22 @@ export default function PatientDocumentsPanel({
         limit: 200,
       });
 
-      setDocuments(res.items || []);
+      if (res.items && res.items.length > 0) {
+        setDocuments(res.items);
+      } else if (initialDocuments && initialDocuments.length > 0) {
+        setDocuments(initialDocuments);
+      }
       const info = await ObjectStore.getStorageInfo();
       setStorageInfo(info);
     } catch (err) {
       console.error('[PatientDocumentsPanel] Error loading objects:', err);
+      if (initialDocuments && initialDocuments.length > 0) {
+        setDocuments(initialDocuments);
+      }
     } finally {
       setIsLoading(false);
     }
-  }, [patientId, filters, sortConfig]);
+  }, [patientId, filters, sortConfig, initialDocuments]);
 
   // Sync Delta with server
   const triggerSync = useCallback(async () => {

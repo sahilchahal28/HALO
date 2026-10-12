@@ -158,7 +158,7 @@ export default function DoctorDashboard() {
   const [docForm, setDocForm] = useState({ title: '', type: 'LAB_REPORT' });
   const [uploadingDoc, setUploadingDoc] = useState(false);
 
-  // Load patient active episode, documents, and timeline if selected
+  // Load patient active episode, documents, and timeline whenever selectedPatient changes
   useEffect(() => {
     if (!selectedPatient?.patientId) {
       setActiveEpisode(null);
@@ -177,49 +177,43 @@ export default function DoctorDashboard() {
         const active = (eps || []).find(e => e.status === 'ACTIVE') || (eps && eps[eps.length - 1]) || null;
         setActiveEpisode(active);
         setTimelineLogs(logs || []);
-        setPatientDocuments(docs || []);
-      } catch (_) {}
+        const resolvedDocs = Array.isArray(docs) ? docs : (docs?.documents || docs?.files || []);
+        setPatientDocuments(resolvedDocs);
+      } catch (err) {
+        console.warn('Episode/document load note:', err.message);
+      }
     }
     loadEpisodeAndTimeline();
-  }, [selectedPatient?.patientId, activeTab]);
+  }, [selectedPatient?.patientId]);
 
-  const handlePatientFound = async (patient) => {
+  const handlePatientFound = (patient) => {
     if (patient && patient.patientId) {
       const pid = patient.patientId;
       if (!activePatientIds.includes(pid)) {
         setActivePatientIds(prev => [...prev, pid]);
       }
+
+      // 1. Instant UI switch - display patient profile immediately
       setSelectedPatient(patient);
       setActiveTab('patientView');
       setPatientSubTab('records');
 
-      // Auto-assign doctor to patient record if not already assigned
+      // 2. Background check: if patient was not yet assigned, confirm assignment
       const docId = user?.doctorId || user?.id || user?._id;
-      if (docId) {
-        try {
-          const updatedPatient = await api.put(`/patients/${pid}/assign-doctor`, { doctorId: docId });
-          if (updatedPatient) setSelectedPatient(updatedPatient);
-          addToast(`Auto-assigned: Patient ${patient.name || patient.fullName} to your care`, 'success');
-        } catch (err) {
-          console.warn('Auto-assignment confirmation note:', err.message);
-        }
-      }
+      const assignedDoc = patient.assignedDoctor;
+      const docMatch = assignedDoc && (
+        (typeof assignedDoc === 'object' && (assignedDoc.doctorId === docId || assignedDoc._id === user?._id)) ||
+        (typeof assignedDoc === 'string' && (assignedDoc === docId || assignedDoc === user?._id))
+      );
 
-      // Re-fetch episodes, documents, and timeline
-      try {
-        const [eps, docs, logs] = await Promise.all([
-          api.get(`/episodes?patientId=${pid}`),
-          api.get(`/patients/${pid}/documents`),
-          api.get(`/dashboard/audit?patientId=${pid}`)
-        ]);
-        const active = (eps || []).find(e => e.status === 'ACTIVE') || (eps && eps[eps.length - 1]) || null;
-        setActiveEpisode(active);
-        const resolvedDocs = Array.isArray(docs) ? docs : (docs?.documents || docs?.files || []);
-        setPatientDocuments(resolvedDocs);
-        setTimelineLogs(logs || []);
-        refreshData();
-      } catch (err) {
-        console.warn('Post-scan load warning:', err.message);
+      if (docId && !docMatch) {
+        api.put(`/patients/${pid}/assign-doctor`, { doctorId: docId })
+          .then(updatedPatient => {
+            if (updatedPatient) setSelectedPatient(updatedPatient);
+          })
+          .catch(err => {
+            console.warn('Background assignment confirmation:', err.message);
+          });
       }
     }
   };
@@ -351,7 +345,17 @@ export default function DoctorDashboard() {
     }
   };
   const activeAmbulances = ambulanceRequests.filter(a => a.status !== 'Completed');
-  const visiblePatients = (patients || []).filter(pt => activePatientIds.includes(pt.patientId));
+  const myDoctorId = user?.doctorId || user?.id;
+  const isAssignedToDoctor = (pt) => {
+    if (!pt) return false;
+    const doc = pt.assignedDoctor;
+    if (!doc) return false;
+    if (typeof doc === 'string') return doc === myDoctorId || doc === user?._id;
+    return doc.doctorId === myDoctorId || doc._id === user?._id || doc.id === myDoctorId;
+  };
+  const visiblePatients = (patients || []).filter(pt => 
+    activePatientIds.includes(pt.patientId) || isAssignedToDoctor(pt)
+  );
 
   // Enforce native app execution
   if (!isStandalone && !devBypass) {
@@ -859,6 +863,7 @@ export default function DoctorDashboard() {
                   patient={selectedPatient}
                   activeEpisode={activeEpisode}
                   doctorUser={user}
+                  initialDocuments={patientDocuments}
                 />
               </div>
             )}

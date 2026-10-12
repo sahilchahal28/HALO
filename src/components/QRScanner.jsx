@@ -14,10 +14,28 @@ export default function QRScanner({ onPatientFound }) {
   
   const qrCodeInstanceRef = useRef(null);
   const fileInputRef = useRef(null);
+  const scanLockRef = useRef(false);
 
   const handleScanSuccess = async (decodedText) => {
-    await stopScanner();
+    // Synchronous guard against burst frames
+    if (scanLockRef.current) return;
+    scanLockRef.current = true;
+
+    // Immediately stop camera frame polling
+    if (qrCodeInstanceRef.current) {
+      try {
+        if (qrCodeInstanceRef.current.isScanning) {
+          qrCodeInstanceRef.current.stop().catch(() => {});
+        }
+      } catch (_) {}
+    }
+
     const cleanText = String(decodedText || '').trim();
+    if (!cleanText) {
+      scanLockRef.current = false;
+      return;
+    }
+
     addToast('QR scan successful. Resolving identity...', 'success');
 
     let token = cleanText;
@@ -60,8 +78,13 @@ export default function QRScanner({ onPatientFound }) {
       const displayName = resolved.name || resolved.fullName || resolved.patientId;
       onPatientFound(resolved);
       addToast(`Access authorized & assigned: ${displayName}`, 'success');
+      // Keep lock active to prevent rescanning while viewing patient
     } catch (err) {
       addToast(err.message || 'Verification failed. Access Denied.', 'error');
+      // Release lock after cooldown so user can scan again
+      setTimeout(() => {
+        scanLockRef.current = false;
+      }, 1500);
     }
   };
 
@@ -98,6 +121,7 @@ export default function QRScanner({ onPatientFound }) {
   };
 
   const startScanner = async (overrideCameraId = null) => {
+    scanLockRef.current = false;
     setCameraError('');
     setScanning(true);
 

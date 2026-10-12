@@ -213,9 +213,12 @@ async function refreshSession() {
   return refreshingPromise;
 }
 
-// 5xx responses from the tunnel/proxy are transient — retry with backoff.
-const TRANSIENT_STATUSES = new Set([408, 502, 503, 504]);
+// 5xx responses and 429 (rate-limit / tunnel proxy backpressure) are transient — retry with backoff.
+const TRANSIENT_STATUSES = new Set([408, 429, 502, 503, 504]);
 const MAX_5XX_RETRIES = 2;
+
+// In-flight GET request memoization map — prevents thundering herd / 429 bursts
+const inFlightGets = new Map();
 
 async function rawRequest(endpoint, options = {}, isRetry = false) {
   const token = getToken();
@@ -262,10 +265,11 @@ async function rawRequest(endpoint, options = {}, isRetry = false) {
 
   if (response.status === 204) return null;
 
-  // Transient upstream failures (tunnel down/restarting) — retry with backoff.
+  // Transient upstream failures (tunnel down/restarting or 429 rate limit) — retry with backoff.
   if (TRANSIENT_STATUSES.has(response.status) && !isRetry) {
     for (let attempt = 1; attempt <= MAX_5XX_RETRIES; attempt++) {
-      await new Promise(r => setTimeout(r, 700 * attempt));
+      const backoffMs = response.status === 429 ? (800 * attempt) : (700 * attempt);
+      await new Promise(r => setTimeout(r, backoffMs));
       let retryRes;
       try {
         retryRes = await fetch(`${base}/api${endpoint}`, {
@@ -326,6 +330,25 @@ async function rawRequest(endpoint, options = {}, isRetry = false) {
 }
 
 async function request(endpoint, options = {}) {
+  const method = (options.method || 'GET').toUpperCase();
+
+  // Deduplicate identical in-flight GET requests to eliminate burst duplicates
+  if (method === 'GET') {
+    const key = endpoint;
+    if (inFlightGets.has(key)) {
+      return inFlightGets.get(key);
+    }
+    const getPromise = (async () => {
+      try {
+        return await rawRequest(endpoint, options);
+      } finally {
+        inFlightGets.delete(key);
+      }
+    })();
+    inFlightGets.set(key, getPromise);
+    return getPromise;
+  }
+
   try {
     return await rawRequest(endpoint, options);
   } catch (err) {
