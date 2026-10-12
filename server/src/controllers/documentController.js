@@ -19,6 +19,22 @@ export async function initiateUpload(req, res, next) {
 
 export async function directUpload(req, res, next) {
   try {
+    console.log('[Upload] Received request:', {
+      hasFile: !!req.file,
+      fileSize: req.file?.size,
+      mimeType: req.file?.mimetype,
+      fileName: req.file?.originalname,
+      bodyKeys: Object.keys(req.body),
+      patientId: req.body.patientId,
+      treatmentEpisodeId: req.body.treatmentEpisodeId,
+      type: req.body.type,
+      title: req.body.title,
+      department: req.body.department,
+      doctor: req.body.doctor,
+      doctorId: req.body.doctorId,
+      user: req.user ? { id: req.user.id, role: req.user.role, name: req.user.name } : 'no-user'
+    });
+
     const actor = req.user || { id: 'admin', role: 'ADMIN', name: 'Admin' };
     const actorRole = actor.role;
 
@@ -29,8 +45,10 @@ export async function directUpload(req, res, next) {
       actorRole,
     });
 
+    console.log('[Upload] Success:', { documentId: result.documentId, s3Key: result.s3Key });
     res.status(201).json(result);
   } catch (err) {
+    console.error('[Upload] Error:', { message: err.message, status: err.status, statusCode: err.statusCode, stack: err.stack });
     next(err);
   }
 }

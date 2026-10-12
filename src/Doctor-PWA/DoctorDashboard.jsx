@@ -1126,6 +1126,25 @@ export default function DoctorDashboard() {
                           formData.append('title', docForm.title);
                           formData.append('department', selectedPatient.department || 'GENERAL');
                           if (user?.name) formData.append('doctor', user.name);
+                          // Add doctorId for proper document linking
+                          if (user?.doctorId) formData.append('doctorId', user.doctorId);
+                          else if (user?.id) formData.append('doctorId', user.id);
+
+                          // Debug: log FormData entries
+                          console.log('[DoctorDashboard] Uploading document:', {
+                            patientId: selectedPatient.patientId,
+                            episodeId: activeEpisode?.episodeId,
+                            type: docForm.type,
+                            title: docForm.title,
+                            fileName: selectedFile.name,
+                            fileSize: selectedFile.size,
+                            mimeType: selectedFile.type,
+                            doctor: user?.name,
+                            doctorId: user?.doctorId || user?.id
+                          });
+                          for (const [key, value] of formData.entries()) {
+                            console.log(`[DoctorDashboard] FormData: ${key} =`, value instanceof File ? `${value.name} (${value.size} bytes, ${value.type})` : value);
+                          }
 
                           await api.post('/documents/upload', formData);
                         } else {
@@ -1147,7 +1166,8 @@ export default function DoctorDashboard() {
                         setPatientDocuments(docs || []);
                         refreshData();
                       } catch (err) {
-                        addToast(err.message, 'error');
+                        console.error('[DoctorDashboard] Upload error:', err);
+                        addToast(err.message || 'Upload failed - check console for details', 'error');
                       } finally {
                         setUploadingDoc(false);
                       }

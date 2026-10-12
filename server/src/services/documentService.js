@@ -6,6 +6,7 @@ import MedicalDocument, {
 } from '../models/MedicalDocument.js';
 import Patient from '../models/Patient.js';
 import TreatmentEpisode from '../models/TreatmentEpisode.js';
+import Doctor from '../models/Doctor.js';
 import { logAction } from './auditService.js';
 import {
   generatePresignedUploadUrl,
@@ -205,14 +206,37 @@ export async function directDocumentUpload({
     throw err;
   }
 
-  const patient = await Patient.findOne({ patientId });
+  const patient = await Patient.findOne({ 
+    patientId: new RegExp(`^${patientId}$`, 'i') 
+  });
   if (!patient) {
-    const err = new Error('Patient not found');
+    const err = new Error(`Patient not found: ${patientId}`);
     err.status = 404;
+    err.statusCode = 404;
     throw err;
   }
 
-  if (actorRole === 'PATIENT' && actor.id !== patientId && actor.patientId !== patientId) {
+  // Resolve doctorId from doctor name if provided (doctor upload flow)
+  let resolvedDoctorId = doctorId;
+  let resolvedDoctorName = doctor;
+  if (!resolvedDoctorId && doctor) {
+    const doc = await Doctor.findOne({ name: new RegExp(`^${doctor}$`, 'i') });
+    if (doc) {
+      resolvedDoctorId = doc.doctorId;
+      resolvedDoctorName = doc.name;
+    }
+  }
+  // Also check actor for doctorId if user is a doctor
+  if (!resolvedDoctorId && actorRole === 'DOCTOR' && (actor.doctorId || actor.id)) {
+    resolvedDoctorId = actor.doctorId || actor.id;
+    // Look up doctor name from ID if not already set
+    if (!resolvedDoctorName && resolvedDoctorId) {
+      const doc = await Doctor.findOne({ doctorId: resolvedDoctorId });
+      if (doc) resolvedDoctorName = doc.name;
+    }
+  }
+
+  if (actorRole === 'PATIENT' && actor.id !== patient.patientId && actor.patientId !== patient.patientId) {
     const err = new Error('Unauthorized: Patients can only upload documents to their own record.');
     err.status = 403;
     throw err;
@@ -256,8 +280,8 @@ export async function directDocumentUpload({
     s3Bucket: BUCKET_NAME,
     fileRef: s3Key,
     department: department || 'GENERAL',
-    doctor: doctor || null,
-    doctorId: doctorId || null,
+    doctor: resolvedDoctorName || null,
+    doctorId: resolvedDoctorId || null,
     examinationDate: new Date(examinationDate),
     status: 'ACTIVE',
     retentionPolicy,
@@ -486,10 +510,8 @@ export async function deleteDocument({ documentId, actor, actorRole }) {
   }
 
   // Attempt S3 deletion
-  let s3Deleted = false;
   try {
-    const result = await deleteS3Object({ key: document.s3Key });
-    s3Deleted = result.deleted;
+    await deleteS3Object({ key: document.s3Key });
   } catch (s3Err) {
     console.error(`[S3 Deletion Error] Failed to delete object ${document.s3Key}:`, s3Err.message);
     // Mark as DELETION_FAILED for worker to retry
