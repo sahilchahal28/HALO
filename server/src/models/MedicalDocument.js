@@ -1,5 +1,8 @@
 import mongoose from 'mongoose';
+import { isAllowedMimeType } from '../utils/mimeTypes.js';
 
+// Legacy list of the most common accepted types — kept for compatibility.
+// Actual validation accepts PDF + any image format (see utils/mimeTypes.js).
 export const ALLOWED_MIME_TYPES = ['application/pdf', 'image/jpeg', 'image/png'];
 export const MAX_FILE_SIZE_BYTES = 15 * 1024 * 1024; // 15 MB
 export const RETENTION_ELIGIBLE_TYPES = ['LAB_REPORT', 'IMAGING', 'TEST_REPORT'];
@@ -36,8 +39,12 @@ const MedicalDocumentSchema = new mongoose.Schema(
     },
     mimeType: {
       type: String,
-      enum: ALLOWED_MIME_TYPES,
       required: true,
+      validate: {
+        validator: (v) => isAllowedMimeType(v),
+        message: (props) =>
+          `${props.value} is not an accepted file type. Accepted: PDF and any image format.`,
+      },
     },
     fileSize: {
       type: Number,

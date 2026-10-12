@@ -88,7 +88,8 @@ export async function admitPatient(req, res, next) {
 export async function getPatientDocuments(req, res, next) {
   try {
     const { patientId } = req.params;
-    const list = await patientService.getPatientDocuments(patientId);
+    const actor = req.user || { id: 'admin', role: 'ADMIN', name: 'Admin' };
+    const list = await patientService.getPatientDocuments(patientId, actor);
     res.json(list);
   } catch (err) {
     next(err);
@@ -98,7 +99,7 @@ export async function getPatientDocuments(req, res, next) {
 export async function addPatientDocument(req, res, next) {
   try {
     const { patientId } = req.params;
-    const actor = req.user ? req.user.id : 'admin';
+    const actor = req.user || { id: 'admin', role: 'ADMIN', name: 'Admin' };
     const document = await patientService.addPatientDocument(patientId, req.body, actor);
     res.status(201).json(document);
   } catch (err) {

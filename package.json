@@ -10,6 +10,7 @@
     "dev": "concurrently \"vite\" \"node --watch server/src/index.js\"",
     "host": "concurrently \"vite --host\" \"node --watch server/src/index.js\"",
     "server": "node --watch server/src/index.js",
+    "start": "vite build && node server/src/index.js",
     "test": "node --test server/tests/*.test.js",
     "build": "vite build",
     "lint": "oxlint",

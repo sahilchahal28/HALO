@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import compression from 'compression';
@@ -98,11 +99,33 @@ const io = new SocketServer(server, {
       ) {
         return callback(null, true);
       }
+      // Allow same-origin / private LAN access: phones and laptops connecting
+      // directly to http://<mac-ip>:5001 (or any other LAN address).
+      const host = new URL(origin).hostname;
+      if (isPrivateNetworkHost(host)) return callback(null, true);
       callback(new Error('Not allowed by CORS'));
     },
     credentials: true,
   },
 });
+
+// Detect private LAN / local loopback hostnames for socket CORS.
+function isPrivateNetworkHost(host) {
+  if (host === 'localhost') return true;
+  const ipv4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(host);
+  if (ipv4) {
+    const a = Number(ipv4[1]);
+    const b = Number(ipv4[2]);
+    // 10.0.0.0/8 · 172.16.0.0/12 · 192.168.0.0/16 · 169.254.0.0/16 (link-local)
+    if (a === 10) return true;
+    if (a === 172 && b >= 16 && b <= 31) return true;
+    if (a === 192 && b === 168) return true;
+    if (a === 169 && b === 254) return true;
+  }
+  // IPv6: unique-local (fc/fd), link-local (fe80), loopback (::1)
+  if (host.startsWith('fc') || host.startsWith('fd') || host === '::1' || host.startsWith('fe80')) return true;
+  return false;
+}
 
 // Socket auth — same rules as the HTTP API
 io.use((socket, next) => {

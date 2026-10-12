@@ -1233,7 +1233,7 @@ export default function DoctorDashboard() {
                     <div className="flex items-center gap-2">
                       <input
                         type="file"
-                        accept=".pdf,image/jpeg,image/png"
+                        accept="image/*,.pdf"
                         onChange={(e) => {
                           const file = e.target.files?.[0];
                           if (file) {

@@ -13,7 +13,6 @@ import os from 'os';
 import http from 'http';
 import { spawn } from 'child_process';
 import localtunnel from 'localtunnel';
-import QRCode from 'qrcode';
 
 const PORT = parseInt(process.env.PORT || '5001', 10);
 const DEFAULT_SUBDOMAIN = process.env.TUNNEL_SUBDOMAIN || 'halo-device-vault-mac';
@@ -71,15 +70,6 @@ async function ensureServerRunning() {
   return child;
 }
 
-// Generate ASCII QR code in terminal
-function renderQr(text) {
-  return new Promise((resolve) => {
-    QRCode.toString(text, { type: 'terminal', small: true }, (err, string) => {
-      resolve(err ? '' : string);
-    });
-  });
-}
-
 async function startTunnel(requestedSubdomain, attempt = 1) {
   console.log(`[Tunnel] Connecting tunnel to port ${PORT}... (requesting: ${requestedSubdomain})`);
   try {
@@ -99,39 +89,37 @@ async function startTunnel(requestedSubdomain, attempt = 1) {
 }
 
 async function main() {
-  console.log('\n================================================================');
-  console.log('   HALO - DEVICE STORAGE SYSTEM & TUNNEL');
-  console.log('================================================================\n');
-
   const lanIp = getLanIp();
   const serverProc = await ensureServerRunning();
 
   let tunnel = await startTunnel(DEFAULT_SUBDOMAIN);
   const publicUrl = tunnel.url;
 
-  const doctorUrl = `${FRONTEND_HOST}/doctor?server=${encodeURIComponent(publicUrl)}`;
-  const patientUrl = `${FRONTEND_HOST}/patient?server=${encodeURIComponent(publicUrl)}`;
-  const adminUrl = `${FRONTEND_HOST}/admin?server=${encodeURIComponent(publicUrl)}`;
-
-  const doctorQr = await renderQr(doctorUrl);
+  // The Vercel frontend proxies /api to this Mac through the tunnel
+  // (see the vercel.json rewrite), so phones must use the PLAIN portal URLs
+  // below — no ?server= override. Appending ?server=<tunnel-url> forces all
+  // API calls cross-origin to the tunnel, which breaks login the moment the
+  // tunnel restarts (no CORS on error pages) and persists in localStorage.
+  const doctorUrl = `${FRONTEND_HOST}/doctor`;
+  const patientUrl = `${FRONTEND_HOST}/patient`;
+  const adminUrl = `${FRONTEND_HOST}/admin`;
 
   console.log('\n================================================================');
-  console.log('  STATUS: ONLINE & READY TO RECEIVE UPLOADS');
+  console.log('  STATUS: ONLINE — TUNNEL READY (VERCEL PATH)');
   console.log('================================================================');
-  console.log(` • Local Server (This Mac):  http://127.0.0.1:${PORT}`);
-  console.log(` • Local Wi-Fi (LAN IP):     http://${lanIp}:${PORT}`);
-  console.log(` • Public Constant Address:  ${publicUrl}`);
-  console.log(` • Mac Storage Directory:    server/storage/users/records/`);
+  console.log(`  • Local Server (This Mac):  http://127.0.0.1:${PORT}`);
+  console.log(`  • Local Wi-Fi (LAN IP):     http://${lanIp}:${PORT}`);
+  console.log(`  • Public Tunnel Address:    ${publicUrl}`);
+  console.log(`  • Mac Storage Directory:    server/storage/users/records/`);
   console.log('----------------------------------------------------------------');
-  console.log('  SCAN WITH PHONE CAMERA TO CONNECT DOCTOR PWA INSTANTLY:');
-  console.log(doctorQr);
-  console.log('----------------------------------------------------------------');
-  console.log('  DIRECT PWA LINKS:');
-  console.log(`  👨‍⚕️ Doctor PWA:  ${doctorUrl}`);
-  console.log(`  🧑‍💼 Patient PWA: ${patientUrl}`);
-  console.log(`  🏢 Admin Web:   ${adminUrl}`);
+  console.log(`  Direct (LAN): open http://${lanIp}:${PORT}/doctor | /patient | /admin`);
+  console.log(`  Vercel path:  ${doctorUrl} | ${patientUrl} | ${adminUrl}`);
+  console.log('                (PWA calls same-origin /api, rewritten to this Mac via vercel.json)');
   console.log('================================================================');
-  console.log(' Keep this terminal window open. Press Ctrl+C to stop.\n');
+  console.log('  Keep this terminal window open. Press Ctrl+C to stop.\n');
+  console.log('  NOTE: only if the Public Tunnel Address above differs from the');
+  console.log('  address in vercel.json should you append ?server=<tunnel-url> to');
+  console.log('  the Vercel links — otherwise login will fail.');
 
   // Auto-reconnect watchdog
   tunnel.on('close', async () => {

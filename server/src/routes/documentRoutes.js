@@ -4,6 +4,7 @@ import path from 'path';
 import fs from 'fs';
 import * as documentController from '../controllers/documentController.js';
 import { getLocalFilePath, decodeFileKey } from '../config/localStorage.js';
+import { isAllowedMimeType, contentTypeForExtension } from '../utils/mimeTypes.js';
 
 const router = express.Router();
 
@@ -12,9 +13,8 @@ const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 15 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
-    const allowed = ['application/pdf', 'image/jpeg', 'image/png'];
-    if (allowed.includes(file.mimetype)) return cb(null, true);
-    cb(new Error(`Unsupported file type: ${file.mimetype}. Only PDF, JPEG, and PNG are accepted.`));
+    if (isAllowedMimeType(file.mimetype)) return cb(null, true);
+    cb(new Error(`Unsupported file type: ${file.mimetype}. Only PDF and image files are accepted.`));
   },
 });
 
@@ -40,12 +40,12 @@ router.get('/file/:encodedKey', (req, res) => {
 
     const filename = req.query.name || path.basename(filePath);
     const ext = path.extname(filePath).toLowerCase();
-    const mimeMap = { '.pdf': 'application/pdf', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png' };
-    const contentType = mimeMap[ext] || 'application/octet-stream';
+    const contentType = contentTypeForExtension(ext);
 
     res.setHeader('Content-Type', contentType);
     // Inline display for images / PDFs; attachment for unknown types
-    const disposition = ['application/pdf', 'image/jpeg', 'image/png'].includes(contentType)
+    const inline = contentType === 'application/pdf' || contentType.startsWith('image/');
+    const disposition = inline
       ? `inline; filename="${filename}"`
       : `attachment; filename="${filename}"`;
     res.setHeader('Content-Disposition', disposition);

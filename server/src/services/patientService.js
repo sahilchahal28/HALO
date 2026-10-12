@@ -7,6 +7,8 @@ import { generateEpisodeId } from '../utils/episodeIdGenerator.js';
 import { generateQrToken } from '../utils/qrTokenGenerator.js';
 import { logAction } from './auditService.js';
 import { buildLocalDownloadUrl } from '../config/localStorage.js';
+import { assertPatientAccess } from './accessControl.js';
+import { fileExtensionFor } from '../utils/mimeTypes.js';
 
 export async function registerPatient(patientData, actor) {
   const cleanAadhaar = String(patientData.aadhaarNumber || '').replace(/\D/g, '');
@@ -212,7 +214,11 @@ export async function admitPatient({ patientId, department, doctorId, reason }, 
   return patient.populate('assignedDoctor');
 }
 
-export async function getPatientDocuments(patientId) {
+export async function getPatientDocuments(patientId, actor) {
+  // Authorization: ADMIN unrestricted · PATIENT own records only ·
+  // DOCTOR only when assigned to this patient.
+  await assertPatientAccess(actor, patientId);
+
   const docs = await MedicalDocument.find({
     patientId: new RegExp(`^${patientId}$`, 'i'),
     status: { $in: ['ACTIVE', 'ARCHIVED'] }
@@ -223,7 +229,7 @@ export async function getPatientDocuments(patientId) {
     if (doc.s3Key) {
       obj.downloadUrl = buildLocalDownloadUrl(
         doc.s3Key,
-        `${doc.title}.${doc.mimeType === 'application/pdf' ? 'pdf' : 'jpg'}`
+        `${doc.title}.${fileExtensionFor(doc.mimeType, doc.title)}`
       );
     }
     if (doc.retentionPolicy?.autoDelete && doc.retentionPolicy?.expiresAt) {
@@ -239,7 +245,11 @@ export async function getPatientDocuments(patientId) {
   });
 }
 
-export async function addPatientDocument(patientId, docData, actor) {
+export async function addPatientDocument(patientId, docData, actor = {}) {
+  // Authorization: ADMIN unrestricted · PATIENT own records only ·
+  // DOCTOR only when assigned to this patient.
+  await assertPatientAccess(actor, patientId);
+
   const patient = await Patient.findOne({ patientId });
   if (!patient) throw new Error('Patient not found');
 
@@ -282,8 +292,8 @@ export async function addPatientDocument(patientId, docData, actor) {
     examinationDate: examDate,
     status: 'ACTIVE',
     retentionPolicy,
-    uploadedBy: actor || 'admin',
-    uploadedByRole: 'ADMIN',
+    uploadedBy: actor.name || actor.id || 'admin',
+    uploadedByRole: actor.role || 'ADMIN',
   });
 
   await document.save();

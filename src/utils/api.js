@@ -19,6 +19,35 @@ import { enqueueMutation } from './offlineQueue';
 export const SERVER_URL_KEY = 'halo_server_url';
 const TOKEN_KEY = 'halo_token';
 
+function isPageHttps() {
+  try {
+    return typeof window !== 'undefined' && window.location.protocol === 'https:';
+  } catch (_) {
+    return false;
+  }
+}
+
+// Browsers permanently block http:// API calls from an https:// page (mixed
+// content) — except loopback hosts, which are treated as secure contexts.
+function isBlockedMixedContent(url) {
+  if (!isPageHttps()) return false;
+  if (!/^http:\/\//i.test(url)) return false;
+  return !/^http:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?(\/|$)/i.test(url);
+}
+
+// Normalize a user-supplied server base into an absolute http(s) URL.
+// Returns '' when the value can never work in this browser context (e.g. an
+// old http:// LAN IP saved while the PWA is now served over https) so the
+// caller falls back to same-origin instead of hard-failing every request.
+function sanitizeApiBase(raw) {
+  const clean = String(raw || '').trim().replace(/\/$/, '');
+  if (!clean) return '';
+  // Bare host/IP without a scheme (e.g. "192.168.1.15:5001") — assume http.
+  const withScheme = /^https?:\/\//i.test(clean) ? clean : `http://${clean}`;
+  if (isBlockedMixedContent(withScheme)) return '';
+  return withScheme;
+}
+
 let refreshingPromise = null;
 
 export class ApiError extends Error {
@@ -56,14 +85,21 @@ export function getApiBase() {
       const searchParams = new URLSearchParams(window.location.search);
       const serverParam = searchParams.get('server');
       if (serverParam) {
-        const clean = serverParam.trim().replace(/\/$/, '');
-        localStorage.setItem(SERVER_URL_KEY, clean);
         // Clean param from address bar without reloading
         searchParams.delete('server');
         const newSearch = searchParams.toString();
         const newUrl = window.location.pathname + (newSearch ? `?${newSearch}` : '') + window.location.hash;
         window.history.replaceState({}, document.title, newUrl);
-        return clean;
+        const clean = sanitizeApiBase(serverParam);
+        if (clean) {
+          localStorage.setItem(SERVER_URL_KEY, clean);
+          return clean;
+        }
+        // A ?server= value that can never work (e.g. http:// from an
+        // https:// page) is ignored — and any stale stored base is dropped
+        // so the app falls back to same-origin instead of hard-failing.
+        localStorage.removeItem(SERVER_URL_KEY);
+        return '';
       }
     } catch (_) {}
 
@@ -71,18 +107,26 @@ export function getApiBase() {
     try {
       const stored = localStorage.getItem(SERVER_URL_KEY);
       if (stored) {
-        return stored.replace(/\/$/, '');
+        const clean = sanitizeApiBase(stored);
+        if (clean) return clean;
+        // Stale override (e.g. an old http:// LAN IP saved while the PWA is
+        // now served over https) — drop it and use same-origin.
+        localStorage.removeItem(SERVER_URL_KEY);
       }
     } catch (_) {}
   }
-  // Same-origin fallback (dev vite proxy or production Express)
+  // Same-origin fallback (dev vite proxy / production Express)
   return '';
 }
 
 /** Persist a server URL override (e.g. "http://192.168.1.10:5001") */
 export function setServerUrl(url) {
   try {
-    if (url) localStorage.setItem(SERVER_URL_KEY, url.trim().replace(/\/$/, ''));
+    if (url) {
+      const clean = sanitizeApiBase(url);
+      if (clean) localStorage.setItem(SERVER_URL_KEY, clean);
+      else localStorage.removeItem(SERVER_URL_KEY);
+    }
     else localStorage.removeItem(SERVER_URL_KEY);
   } catch (_) {}
 }
@@ -145,7 +189,7 @@ async function rawRequest(endpoint, options = {}, isRetry = false) {
     });
   } catch (_) {
     throw new ApiError(
-      'Network error: Unable to reach the HALO server. Make sure the backend server is running and the server URL is correctly configured in Settings.',
+      `Network error: Unable to reach the HALO server at ${base || 'same-origin'}. Make sure the backend server is running, then check Host Server Settings (Reset Default uses the built-in connection).`,
       undefined
     );
   }

@@ -11,6 +11,17 @@ import { getApiBase, setServerUrl, clearServerUrl } from '../utils/api';
  * Uploaded medical records are stored directly on the host machine under:
  *   server/storage/users/records/<patientId>/<file>
  */
+
+// Browsers block http:// API calls from an https:// page (mixed content),
+// so an http:// LAN address can never work there — same-origin only.
+const IS_HTTPS_PAGE = typeof window !== 'undefined' && window.location.protocol === 'https:';
+const isUnusableHttp = (url) => {
+  if (!IS_HTTPS_PAGE) return false;
+  const v = String(url || '').trim();
+  if (!/^http:\/\//i.test(v)) return false;
+  return !/^http:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?(\/|$)/i.test(v);
+};
+
 export default function ServerConfigModal({ isOpen, onClose, addToast }) {
   const [currentBase, setCurrentBase] = useState(() => getApiBase());
   const [inputUrl, setInputUrl] = useState(() => getApiBase() || '');
@@ -33,7 +44,8 @@ export default function ServerConfigModal({ isOpen, onClose, addToast }) {
         if (data.lanIp) {
           setDetectedLanIp(data.lanIp);
           // If no custom URL is saved and we're not on localhost, suggest http://<lanIp>:5001
-          if (!getApiBase() && typeof window !== 'undefined' && window.location.hostname !== 'localhost') {
+          // — but never on an https:// page, where browsers block http:// outright.
+          if (!IS_HTTPS_PAGE && !getApiBase() && typeof window !== 'undefined' && window.location.hostname !== 'localhost') {
             setInputUrl(`http://${data.lanIp}:5001`);
           }
         }
@@ -89,6 +101,13 @@ export default function ServerConfigModal({ isOpen, onClose, addToast }) {
   const handleSave = () => {
     const trimmed = inputUrl.trim().replace(/\/$/, '');
     if (trimmed) {
+      if (isUnusableHttp(trimmed)) {
+        setTestResult({
+          success: false,
+          message: 'This app is served over HTTPS, so browsers block http:// server addresses. Leave the field blank to use the secure built-in connection.'
+        });
+        return;
+      }
       setServerUrl(trimmed);
       setCurrentBase(trimmed);
       if (addToast) addToast(`Server address set to: ${trimmed}`, 'success');
@@ -177,7 +196,9 @@ export default function ServerConfigModal({ isOpen, onClose, addToast }) {
             </button>
           </div>
           <p className="text-[10px] text-ink-muted-48">
-            Leave blank if running directly on the same computer. Enter <code>http://&lt;your-computer-ip&gt;:5001</code> when accessing from a mobile phone on Wi-Fi.
+            {IS_HTTPS_PAGE
+              ? 'Leave blank to use the secure built-in connection. Only enter an https:// address here — plain http:// addresses are blocked by browsers on secure pages.'
+              : <>Leave blank if running directly on the same computer. Enter <code>http://&lt;your-computer-ip&gt;:5001</code> when accessing from a mobile phone on Wi-Fi.</>}
           </p>
         </div>
 
@@ -188,17 +209,35 @@ export default function ServerConfigModal({ isOpen, onClose, addToast }) {
               <span className="text-[11px] text-ink font-medium">Detected host IP:</span>
               <code className="text-primary font-bold text-[11px]">{detectedLanIp}:5001</code>
             </div>
-            <button
-              type="button"
-              onClick={() => {
-                const target = `http://${detectedLanIp}:5001`;
-                setInputUrl(target);
-                handleTestConnection(target);
-              }}
-              className="text-[10px] text-primary underline font-semibold cursor-pointer hover:opacity-80"
-            >
-              Use This
-            </button>
+            {IS_HTTPS_PAGE ? (
+              <span className="text-[10px] text-ink-muted-48 font-medium text-right leading-tight">
+                Blocked over HTTPS —<br />use the built-in connection
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  const target = `http://${detectedLanIp}:5001`;
+                  setInputUrl(target);
+                  handleTestConnection(target);
+                }}
+                className="text-[10px] text-primary underline font-semibold cursor-pointer hover:opacity-80"
+              >
+                Use This
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* HTTPS notice: http:// overrides can never work on an https:// page */}
+        {IS_HTTPS_PAGE && (
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-[11px] text-amber-900 leading-snug flex items-start gap-2">
+            <AlertCircle size={14} className="shrink-0 mt-0.5 text-amber-600" />
+            <span>
+              This page is served over <strong>HTTPS</strong>, so browsers block plain <code>http://</code> server
+              addresses. Leave the field blank and use <strong>Reset Default</strong> — the built-in connection
+              reaches your Mac securely through the tunnel.
+            </span>
           </div>
         )}
 

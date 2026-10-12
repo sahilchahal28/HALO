@@ -21,8 +21,8 @@
  *   remote destination without changing this layer.
  */
 import crypto from 'crypto';
+import path from 'path';
 import MedicalDocument, {
-  ALLOWED_MIME_TYPES,
   MAX_FILE_SIZE_BYTES,
   RETENTION_ELIGIBLE_TYPES,
 } from '../models/MedicalDocument.js';
@@ -30,6 +30,11 @@ import Patient from '../models/Patient.js';
 import TreatmentEpisode from '../models/TreatmentEpisode.js';
 import Doctor from '../models/Doctor.js';
 import { logAction } from './auditService.js';
+import {
+  assertPatientAccess,
+  getDeletePermissionError,
+} from './accessControl.js';
+import { isAllowedMimeType, fileExtensionFor } from '../utils/mimeTypes.js';
 import {
   putLocalObject,
   deleteLocalObject,
@@ -110,8 +115,8 @@ export async function directDocumentUpload({
   const mimeType = file.mimetype;
   const fileSize = file.size;
 
-  if (!ALLOWED_MIME_TYPES.includes(mimeType)) {
-    const err = new Error(`Invalid file type: ${mimeType}. Allowed types: PDF, JPEG, PNG.`);
+  if (!isAllowedMimeType(mimeType)) {
+    const err = new Error(`Invalid file type: ${mimeType}. Allowed types: PDF and any image format.`);
     err.status = 400;
     throw err;
   }
@@ -157,18 +162,12 @@ export async function directDocumentUpload({
   }
 
   // ── Authorization ──
-  if (
-    actorRole === 'PATIENT' &&
-    actor.id !== patient.patientId &&
-    actor.patientId !== patient.patientId
-  ) {
-    const err = new Error('Unauthorized: Patients can only upload documents to their own record.');
-    err.status = 403;
-    throw err;
-  }
+  // ADMIN: unrestricted. PATIENT: own record only.
+  // DOCTOR: only when they are the patient's assigned doctor.
+  await assertPatientAccess(actor, patient.patientId, { patient });
 
   // ── Build file path ──
-  const ext = mimeType === 'application/pdf' ? 'pdf' : mimeType === 'image/png' ? 'png' : 'jpg';
+  const ext = fileExtensionFor(mimeType, file.originalname);
   const uniqueToken = crypto.randomUUID();
   const filename = `${Date.now()}-${uniqueToken}.${ext}`;
   const fileKey = buildFileKey(patient.patientId, filename);
@@ -241,15 +240,24 @@ export async function listDocuments({
   actor,
   actorRole,
 }) {
-  // Patients can ONLY list their own documents
+  // ── Authorization ──
+  // ADMIN: unrestricted. PATIENT: own records only.
+  // DOCTOR: only for patients assigned to them (patientId required).
   if (actorRole === 'PATIENT') {
     const allowedId = actor.patientId || actor.id;
-    if (patientId && patientId !== allowedId) {
+    if (patientId && String(patientId).trim().toUpperCase() !== String(allowedId).trim().toUpperCase()) {
       const err = new Error('Unauthorized: Patients can only view their own documents.');
       err.status = 403;
       throw err;
     }
     patientId = allowedId;
+  } else if (actorRole === 'DOCTOR') {
+    if (!patientId) {
+      const err = new Error('patientId is required to list documents.');
+      err.status = 400;
+      throw err;
+    }
+    await assertPatientAccess(actor, patientId);
   }
 
   const query = {};
@@ -278,7 +286,7 @@ export async function listDocuments({
   const [totalCount, documents] = await Promise.all([
     MedicalDocument.countDocuments(query),
     MedicalDocument.find(query)
-      .sort({ examinationDate: -1, createdAt: -1 })
+      .sort({ createdAt: -1, examinationDate: -1 })
       .skip(skip)
       .limit(limitNum),
   ]);
@@ -286,9 +294,10 @@ export async function listDocuments({
   // Enrich each document with a pre-built download URL and retention notice
   const enriched = documents.map((doc) => {
     const obj = doc.toObject();
+    const ext = fileExtensionFor(doc.mimeType, doc.title);
     obj.downloadUrl = buildLocalDownloadUrl(
       doc.s3Key,
-      `${doc.title}.${doc.mimeType === 'application/pdf' ? 'pdf' : 'jpg'}`
+      `${doc.title}.${ext}`
     );
 
     if (doc.retentionPolicy?.autoDelete && doc.retentionPolicy?.expiresAt) {
@@ -335,15 +344,10 @@ export async function getDocumentDownloadUrl({ documentId, actor, actorRole }) {
     throw err;
   }
 
-  // Patients can only download their own documents
-  if (actorRole === 'PATIENT') {
-    const allowedId = actor.patientId || actor.id;
-    if (document.patientId !== allowedId) {
-      const err = new Error('Unauthorized: You can only view and download your own medical records.');
-      err.status = 403;
-      throw err;
-    }
-  }
+  // ── Authorization ──
+  // ADMIN: unrestricted. PATIENT: own records only.
+  // DOCTOR: only when they are the patient's assigned doctor.
+  await assertPatientAccess(actor, document.patientId);
 
   // Verify the file is still on disk
   const { exists } = await checkLocalObjectExists({ key: document.s3Key });
@@ -353,7 +357,7 @@ export async function getDocumentDownloadUrl({ documentId, actor, actorRole }) {
     throw err;
   }
 
-  const filename = `${document.title}.${document.mimeType === 'application/pdf' ? 'pdf' : 'jpg'}`;
+  const filename = `${document.title}.${fileExtensionFor(document.mimeType, document.title)}`;
   const downloadUrl = buildLocalDownloadUrl(document.s3Key, filename);
 
   await logAction({
@@ -390,24 +394,11 @@ export async function deleteDocument({ documentId, actor, actorRole }) {
     throw err;
   }
 
-  // Strict role check
-  if (actorRole !== 'PATIENT') {
-    const err = new Error('Forbidden: Medical records can only be removed by the patient.');
-    err.status = 403;
-    throw err;
-  }
-
-  const allowedId = actor.patientId || actor.id;
-  if (document.patientId !== allowedId) {
-    const err = new Error('Forbidden: You can only delete your own medical records.');
-    err.status = 403;
-    throw err;
-  }
-
-  // Legal hold check
-  if (document.legalHold) {
-    const err = new Error('Cannot delete document: An active legal/medical hold is in place.');
-    err.status = 400;
+  // Strict role + ownership + legal-hold checks (patient-only deletion)
+  const deleteError = getDeletePermissionError(actor, actorRole, document);
+  if (deleteError) {
+    const err = new Error(deleteError);
+    err.status = deleteError.startsWith('Cannot delete') ? 400 : 403;
     throw err;
   }
 
@@ -433,6 +424,13 @@ export async function deleteDocument({ documentId, actor, actorRole }) {
 // ─── Legal Hold ──────────────────────────────────────────────────────────────
 
 export async function updateLegalHold({ documentId, legalHold, reason, actor, actorRole }) {
+  // Legal holds are an administrative action — only ADMIN may place/release them
+  if (actorRole !== 'ADMIN') {
+    const err = new Error('Forbidden: Only admins can place or release legal holds.');
+    err.status = 403;
+    throw err;
+  }
+
   const document = await MedicalDocument.findOne({ documentId });
   if (!document) {
     const err = new Error('Document not found');
