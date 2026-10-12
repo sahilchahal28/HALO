@@ -365,11 +365,12 @@ export function AppProvider({ children }) {
           setSurgeries(prev => (JSON.stringify(prev) !== JSON.stringify(surg) ? surg : prev));
           setAmbulanceRequests(prev => (JSON.stringify(prev) !== JSON.stringify(amb) ? amb : prev));
           setPatients(prev => (JSON.stringify(prev) !== JSON.stringify(pts) ? pts : prev));
-        } else if (user.role === 'PATIENT' && user.patientId) {
+        } else if (user.role === 'PATIENT' && (user.patientId || user.id)) {
+          const pid = user.patientId || user.id;
           const [eps, profile, docs] = await Promise.all([
-            api.get(`/episodes?patientId=${user.patientId}`),
-            api.get(`/patients/${user.patientId}`),
-            api.get(`/patients/${user.patientId}/documents`)
+            api.get(`/episodes?patientId=${pid}`),
+            api.get(`/patients/${pid}`),
+            api.get(`/patients/${pid}/documents`)
           ]);
           setPatientProfile(prev => (JSON.stringify(prev) !== JSON.stringify(profile) ? profile : prev));
           setPatientDocuments(prev => (JSON.stringify(prev) !== JSON.stringify(docs || []) ? (docs || []) : prev));
@@ -428,10 +429,11 @@ export function AppProvider({ children }) {
       } else if (user.role === 'DOCTOR') {
         setDoctorNotifications(await api.get(`/notifications/${user.id}`));
         setDoctors(await api.get('/doctors'));
-      } else if (user.role === 'PATIENT' && user.patientId) {
+      } else if (user.role === 'PATIENT' && (user.patientId || user.id)) {
+        const pid = user.patientId || user.id;
         const [eps, docs, dcs] = await Promise.all([
-          api.get(`/episodes?patientId=${user.patientId}`),
-          api.get(`/patients/${user.patientId}/documents`),
+          api.get(`/episodes?patientId=${pid}`),
+          api.get(`/patients/${pid}/documents`),
           api.get('/doctors')
         ]);
         setPatientEpisode(eps.find(e => e.status === 'ACTIVE') || eps[eps.length - 1] || null);

@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
-import { api } from '../utils/api';
+import { api, getFileUrl } from '../utils/api';
 import QRCode from 'qrcode';
+import ServerConfigModal from '../components/ServerConfigModal';
 import { 
   User, Calendar, CreditCard, ChevronRight, Activity, 
   MapPin, ShieldAlert, Phone, Ambulance, MessageSquare, Info,
-  Check, Receipt, Smartphone, Download, Trash2, FileText, AlertCircle, UploadCloud
+  Check, Receipt, Smartphone, Download, Trash2, FileText, AlertCircle, UploadCloud, Server
 } from 'lucide-react';
 
 export default function PatientDashboard() {
@@ -53,6 +54,7 @@ export default function PatientDashboard() {
   const [uploadingDoc, setUploadingDoc] = useState(false);
   const [downloadingDocId, setDownloadingDocId] = useState(null);
   const [deletingDocId, setDeletingDocId] = useState(null);
+  const [showServerModal, setShowServerModal] = useState(false);
 
   useEffect(() => {
     const standaloneMode = 
@@ -222,15 +224,21 @@ export default function PatientDashboard() {
             Once installed, launch the app from your home screen.
           </div>
 
-          {/* Dev Bypass Link */}
-          {(window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') && (
-            <button 
-              onClick={() => setDevBypass(true)}
-              className="text-[10px] text-primary hover:underline cursor-pointer pt-2"
-            >
-              Developer Bypass (Localhost Only)
-            </button>
-          )}
+          {/* Dev / Test Bypass Link */}
+          <button 
+            onClick={() => setDevBypass(true)}
+            className="text-[10px] text-primary hover:underline cursor-pointer pt-2"
+          >
+            Continue in Browser (Dev / Testing Mode)
+          </button>
+          
+          <button
+            type="button"
+            onClick={() => setShowServerModal(true)}
+            className="text-[10px] text-ink-muted-48 hover:text-ink flex items-center justify-center gap-1 cursor-pointer pt-1"
+          >
+            <Server size={11} /> Server Host Settings
+          </button>
         </div>
       </div>
     );
@@ -290,9 +298,21 @@ export default function PatientDashboard() {
           </form>
           
           <div className="text-center mt-6">
+            <button
+              type="button"
+              onClick={() => setShowServerModal(true)}
+              className="text-[10px] text-primary hover:underline inline-flex items-center gap-1 cursor-pointer mb-2 font-medium"
+            >
+              <Server size={12} /> Configure Server Host IP
+            </button>
             <span className="text-[9px] text-ink-muted-48 uppercase tracking-wider block font-sans">SECURE PATIENT GATEWAY • ENCRYPTED</span>
           </div>
         </div>
+        <ServerConfigModal 
+          isOpen={showServerModal} 
+          onClose={() => setShowServerModal(false)} 
+          addToast={addToast} 
+        />
       </div>
     );
   }
@@ -309,8 +329,16 @@ export default function PatientDashboard() {
           <span className="text-ink text-sm font-semibold tracking-tight uppercase">HALO Care</span>
         </div>
         
-        {/* Language select dropdown & Exit */}
+        {/* Language select dropdown & Server Settings & Exit */}
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setShowServerModal(true)}
+            className="p-1.5 rounded-full text-ink-muted-48 hover:text-primary hover:bg-canvas-parchment cursor-pointer transition-colors"
+            title="Configure Server Host"
+          >
+            <Server size={15} />
+          </button>
           <select 
             value={language} 
             onChange={(e) => setLanguage(e.target.value)} 
@@ -839,10 +867,11 @@ export default function PatientDashboard() {
                     if (!uploadDocForm.title.trim()) return;
                     setUploadingDoc(true);
                     try {
+                      const patientTargetId = user?.patientId || user?.id;
                       if (selectedUploadFile) {
                         const formData = new FormData();
                         formData.append('file', selectedUploadFile);
-                        formData.append('patientId', user.patientId);
+                        formData.append('patientId', patientTargetId);
                         if (patientEpisode?.episodeId) formData.append('treatmentEpisodeId', patientEpisode.episodeId);
                         formData.append('type', uploadDocForm.type);
                         formData.append('title', uploadDocForm.title);
@@ -851,7 +880,7 @@ export default function PatientDashboard() {
                         await api.post('/documents/upload', formData);
                       } else {
                         // Fallback metadata
-                        await api.post(`/patients/${user.patientId}/documents`, {
+                        await api.post(`/patients/${patientTargetId}/documents`, {
                           title: uploadDocForm.title,
                           type: uploadDocForm.type,
                           treatmentEpisodeId: patientEpisode?.episodeId,
@@ -944,7 +973,9 @@ export default function PatientDashboard() {
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {patientDocuments.map((doc, i) => (
+                  {[...(patientDocuments || [])]
+                    .sort((a, b) => new Date(b.createdAt || b.examinationDate || 0) - new Date(a.createdAt || a.examinationDate || 0))
+                    .map((doc, i) => (
                     <div 
                       key={doc.documentId || i} 
                       className="bg-canvas border border-hairline p-4 flex justify-between items-center text-xs"
@@ -987,7 +1018,7 @@ export default function PatientDashboard() {
                               setDownloadingDocId(docId);
                               const res = await api.get(`/documents/${docId}/download-url`);
                               if (res.downloadUrl) {
-                                window.open(res.downloadUrl, '_blank');
+                                window.open(getFileUrl(res.downloadUrl), '_blank');
                               } else {
                                 addToast('Signed download link opened', 'info');
                               }
@@ -1105,7 +1136,7 @@ export default function PatientDashboard() {
               </h3>
 
               {patientEpisode?.requiresAttention ? (() => {
-                const assignedDoctor = doctors.find(d => d.doctorId === patientEpisode?.doctorId);
+                const assignedDoctor = (doctors || []).find(d => d.doctorId === patientEpisode?.doctorId);
                 const callDoctorPhone = patientEpisode?.doctorPhone || assignedDoctor?.phone || '';
                 const callDoctorName = patientEpisode?.doctorName || assignedDoctor?.name || 'Your Doctor';
                 
@@ -1348,6 +1379,12 @@ export default function PatientDashboard() {
           <span className="mt-1 text-[9px] uppercase tracking-wider font-semibold">Emergency</span>
         </button>
       </footer>
+
+      <ServerConfigModal 
+        isOpen={showServerModal} 
+        onClose={() => setShowServerModal(false)} 
+        addToast={addToast} 
+      />
 
     </div>
   );

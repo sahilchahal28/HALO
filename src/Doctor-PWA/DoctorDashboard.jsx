@@ -1,18 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
-import { api } from '../utils/api';
+import { api, getFileUrl } from '../utils/api';
 import QRScanner from '../components/QRScanner';
 import PrescriptionDigitizer from '../components/PrescriptionDigitizer';
+import ServerConfigModal from '../components/ServerConfigModal';
 import { 
   Stethoscope, Calendar, Inbox, Search, LogOut, Sparkles, 
   AlertCircle, ShieldAlert, PhoneCall, PlusCircle, CheckCircle, FileText,
-  Smartphone, Download, Users
+  Smartphone, Download, Users, Server
 } from 'lucide-react';
 
 export default function DoctorDashboard() {
   const { 
     user, login, logout, exitApp, t, doctorNotifications, surgeries, 
-    ambulanceRequests, addToast, refreshData, patients
+    ambulanceRequests, addToast, refreshData, patients, doctors
   } = useApp();
 
   const [activeTab, setActiveTabState] = useState(() => {
@@ -104,6 +105,7 @@ export default function DoctorDashboard() {
   const [showDigitizer, setShowDigitizer] = useState(false);
   const [selectedFile, setSelectedFile] = useState(null);
   const [downloadingDocId, setDownloadingDocId] = useState(null);
+  const [showServerModal, setShowServerModal] = useState(false);
 
   // New consultation details
   const [consForm, setConsForm] = useState({ notes: '', diagnosis: '' });
@@ -185,7 +187,7 @@ export default function DoctorDashboard() {
         const eps = await api.get(`/episodes?patientId=${patient.patientId}`);
         const active = eps.find(e => e.status === 'ACTIVE');
         const docId = user?.id || user?._id;
-        const currentDoctor = doctors.find(d => d.doctorId === docId) || user;
+        const currentDoctor = (doctors || []).find(d => d.doctorId === docId) || user;
         const phone = currentDoctor?.phone || user?.phone || '';
 
         if (active && docId) {
@@ -225,7 +227,7 @@ export default function DoctorDashboard() {
 
     try {
       const docId = user?.id || user?._id;
-      const currentDoctor = doctors.find(d => d.doctorId === docId) || user;
+      const currentDoctor = (doctors || []).find(d => d.doctorId === docId) || user;
       const phone = currentDoctor?.phone || user?.phone || '';
       const doctorName = currentDoctor?.name || user?.name || '';
 
@@ -359,15 +361,21 @@ export default function DoctorDashboard() {
             Once installed, launch the app from your home screen.
           </div>
 
-          {/* Dev Bypass Link */}
-          {(window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') && (
-            <button 
-              onClick={() => setDevBypass(true)}
-              className="text-[10px] text-primary hover:underline cursor-pointer pt-2"
-            >
-              Developer Bypass (Localhost Only)
-            </button>
-          )}
+          {/* Dev / Test Bypass Link */}
+          <button 
+            onClick={() => setDevBypass(true)}
+            className="text-[10px] text-primary hover:underline cursor-pointer pt-2"
+          >
+            Continue in Browser (Dev / Testing Mode)
+          </button>
+          
+          <button
+            type="button"
+            onClick={() => setShowServerModal(true)}
+            className="text-[10px] text-ink-muted-48 hover:text-ink flex items-center justify-center gap-1 cursor-pointer pt-1"
+          >
+            <Server size={11} /> Server Host Settings
+          </button>
         </div>
       </div>
     );
@@ -427,9 +435,21 @@ export default function DoctorDashboard() {
           </form>
           
           <div className="text-center mt-6">
+            <button
+              type="button"
+              onClick={() => setShowServerModal(true)}
+              className="text-[10px] text-primary hover:underline inline-flex items-center gap-1 cursor-pointer mb-2 font-medium"
+            >
+              <Server size={12} /> Configure Server Host IP
+            </button>
             <span className="text-[9px] text-ink-muted-48 uppercase tracking-wider block font-sans">SECURE BIOMETRIC • CLINICAL GATEWAY</span>
           </div>
         </div>
+        <ServerConfigModal 
+          isOpen={showServerModal} 
+          onClose={() => setShowServerModal(false)} 
+          addToast={addToast} 
+        />
       </div>
     );
   }
@@ -444,6 +464,14 @@ export default function DoctorDashboard() {
           <span className="font-sans text-ink text-sm font-semibold tracking-tight uppercase">Dr. Feed • HALO</span>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setShowServerModal(true)}
+            className="p-1.5 rounded-full text-ink-muted-48 hover:text-primary hover:bg-canvas-parchment cursor-pointer transition-colors"
+            title="Configure Server Host"
+          >
+            <Server size={15} />
+          </button>
           <span className="text-[11px] bg-canvas-parchment border border-hairline text-ink px-2.5 py-1 rounded-full truncate max-w-[80px] font-semibold">
             {user?.name}
           </span>
@@ -1049,7 +1077,9 @@ export default function DoctorDashboard() {
                   </div>
 
                   <div className="space-y-2 mb-4 max-h-52 overflow-y-auto pr-1">
-                    {patientDocuments.map((doc, i) => (
+                    {[...(patientDocuments || [])]
+                      .sort((a, b) => new Date(b.createdAt || b.examinationDate || 0) - new Date(a.createdAt || a.examinationDate || 0))
+                      .map((doc, i) => (
                       <div key={i} className="flex justify-between items-center bg-canvas-parchment border border-hairline rounded-[11px] p-3 text-xs">
                         <div className="space-y-1">
                           <div className="font-semibold text-ink flex items-center gap-1.5">
@@ -1088,7 +1118,7 @@ export default function DoctorDashboard() {
                                 setDownloadingDocId(doc.documentId);
                                 const res = await api.get(`/documents/${doc.documentId}/download-url`);
                                 if (res.downloadUrl) {
-                                  window.open(res.downloadUrl, '_blank');
+                                  window.open(getFileUrl(res.downloadUrl), '_blank');
                                 } else {
                                   addToast('Download link generated', 'info');
                                 }
@@ -1119,8 +1149,9 @@ export default function DoctorDashboard() {
                       try {
                         if (selectedFile) {
                           const formData = new FormData();
+                          const patientTargetId = selectedPatient.patientId || selectedPatient.id;
                           formData.append('file', selectedFile);
-                          formData.append('patientId', selectedPatient.patientId);
+                          formData.append('patientId', patientTargetId);
                           if (activeEpisode?.episodeId) formData.append('treatmentEpisodeId', activeEpisode.episodeId);
                           formData.append('type', docForm.type);
                           formData.append('title', docForm.title);
@@ -1373,6 +1404,12 @@ export default function DoctorDashboard() {
           )}
         </button>
       </footer>
+
+      <ServerConfigModal 
+        isOpen={showServerModal} 
+        onClose={() => setShowServerModal(false)} 
+        addToast={addToast} 
+      />
 
     </div>
   );

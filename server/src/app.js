@@ -24,7 +24,13 @@ app.disable('x-powered-by');
 // Enable GZIP compression for all responses (reduces bundle payloads by 70%+)
 app.use(compression());
 
-app.use(cors());
+// CORS — allow all origins with credentials for LAN / PWA access
+app.use(cors({
+  origin: true,
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+}));
 app.use(express.json());
 
 // Mount auth routes (public — login/refresh/logout manage their own access)

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
-import { api } from '../utils/api';
+import { api, getFileUrl } from '../utils/api';
 import {
   Building2, Users, Bed, Truck, Droplet, Package,
   UserPlus, Plus, Search, Calendar, ChevronRight, AlertTriangle,
@@ -1561,7 +1561,7 @@ export default function AdminDashboard() {
                                       try {
                                         const docId = doc.documentId || doc.id;
                                         const res = await api.get(`/documents/${docId}/download-url`);
-                                        if (res.downloadUrl) window.open(res.downloadUrl, '_blank');
+                                        if (res.downloadUrl) window.open(getFileUrl(res.downloadUrl), '_blank');
                                       } catch (err) {
                                         addToast(err.message || 'Download error', 'error');
                                       }

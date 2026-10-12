@@ -6,6 +6,7 @@ import { generatePatientId } from '../utils/patientIdGenerator.js';
 import { generateEpisodeId } from '../utils/episodeIdGenerator.js';
 import { generateQrToken } from '../utils/qrTokenGenerator.js';
 import { logAction } from './auditService.js';
+import { buildLocalDownloadUrl } from '../config/localStorage.js';
 
 export async function registerPatient(patientData, actor) {
   const cleanAadhaar = String(patientData.aadhaarNumber || '').replace(/\D/g, '');
@@ -212,10 +213,30 @@ export async function admitPatient({ patientId, department, doctorId, reason }, 
 }
 
 export async function getPatientDocuments(patientId) {
-  return await MedicalDocument.find({
-    patientId,
+  const docs = await MedicalDocument.find({
+    patientId: new RegExp(`^${patientId}$`, 'i'),
     status: { $in: ['ACTIVE', 'ARCHIVED'] }
-  }).sort({ examinationDate: -1, createdAt: -1 });
+  }).sort({ createdAt: -1, examinationDate: -1 });
+
+  return docs.map(doc => {
+    const obj = doc.toObject();
+    if (doc.s3Key) {
+      obj.downloadUrl = buildLocalDownloadUrl(
+        doc.s3Key,
+        `${doc.title}.${doc.mimeType === 'application/pdf' ? 'pdf' : 'jpg'}`
+      );
+    }
+    if (doc.retentionPolicy?.autoDelete && doc.retentionPolicy?.expiresAt) {
+      const daysLeft = Math.max(
+        0,
+        Math.ceil((doc.retentionPolicy.expiresAt - Date.now()) / (1000 * 60 * 60 * 24))
+      );
+      obj.retentionNotice = `⚠️ Auto-deleted after 6 months (${daysLeft} day${daysLeft !== 1 ? 's' : ''} remaining)`;
+    } else {
+      obj.retentionNotice = 'Stored permanently';
+    }
+    return obj;
+  });
 }
 
 export async function addPatientDocument(patientId, docData, actor) {

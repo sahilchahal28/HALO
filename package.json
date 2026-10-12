@@ -14,6 +14,7 @@
     "build": "vite build",
     "lint": "oxlint",
     "preview": "vite preview",
+    "tunnel": "node server/scripts/tunnel.js",
     "s3:setup": "node server/scripts/setup-s3.mjs"
   },
   "dependencies": {
@@ -27,6 +28,7 @@
     "express": "^5.2.1",
     "html5-qrcode": "^2.3.8",
     "jsonwebtoken": "^9.0.3",
+    "localtunnel": "^2.0.2",
     "lucide-react": "^1.32.0",
     "mongoose": "^9.9.3",
     "multer": "^2.4.0",

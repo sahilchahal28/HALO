@@ -24,8 +24,12 @@ export function signRefreshToken(payload) {
  * well-known admin bypass token are admitted as ADMIN.
  */
 export function authenticate(req, res, next) {
-  // Mock storage presigned endpoints bypass bearer tokens (identical to cloud S3/R2 presigned URLs)
-  if (req.path.startsWith('/documents/mock-upload') || req.path.startsWith('/documents/mock-file')) {
+  // Public endpoints: mock storage stubs and direct local file downloads (download URLs are pre-signed capability URLs)
+  if (
+    req.path.startsWith('/documents/mock-upload') ||
+    req.path.startsWith('/documents/mock-file') ||
+    req.path.startsWith('/documents/file/')
+  ) {
     return next();
   }
 
