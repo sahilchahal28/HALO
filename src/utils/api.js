@@ -14,6 +14,7 @@ import { enqueueMutation } from './offlineQueue';
  *  1. If `halo_server_url` is set in localStorage → use that origin for all
  *     API calls (e.g. http://192.168.1.5:5001)
  *  2. Otherwise → fall back to same-origin `/api` (dev proxy / production)
+ *  3. Auto-detect LAN IP via /api/server-info when on same network
  */
 
 export const SERVER_URL_KEY = 'halo_server_url';
@@ -46,6 +47,44 @@ function sanitizeApiBase(raw) {
   const withScheme = /^https?:\/\//i.test(clean) ? clean : `http://${clean}`;
   if (isBlockedMixedContent(withScheme)) return '';
   return withScheme;
+}
+
+// Cache for auto-detected LAN base to avoid repeated probes
+let lanBaseCache = null;
+let lanBaseCacheTime = 0;
+const LAN_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+// Synchronous getter for cached LAN base (used by getApiBase)
+function getCachedLanBase() {
+  if (lanBaseCache && Date.now() - lanBaseCacheTime < LAN_CACHE_TTL) {
+    return lanBaseCache;
+  }
+  return null;
+}
+
+// Background probe for LAN base — runs async, updates cache
+async function probeLanBase() {
+  if (typeof window === 'undefined') return;
+  // Only probe when on https (Vercel) - on http we're already direct
+  if (!isPageHttps()) return;
+  try {
+    const res = await fetch('/api/server-info', { credentials: 'same-origin' });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.lanIp) {
+        const base = `http://${data.lanIp}:5001`;
+        lanBaseCache = base;
+        lanBaseCacheTime = Date.now();
+      }
+    }
+  } catch (_) {}
+}
+
+// Kick off background probe on module load
+if (typeof window !== 'undefined') {
+  probeLanBase();
+  // Re-probe periodically
+  setInterval(probeLanBase, LAN_CACHE_TTL);
 }
 
 let refreshingPromise = null;
@@ -114,6 +153,11 @@ export function getApiBase() {
         localStorage.removeItem(SERVER_URL_KEY);
       }
     } catch (_) {}
+
+    // 3. Auto-detected LAN IP (cached) — allows direct Mac connection
+    //    when phone is on same Wi-Fi, bypassing the flaky tunnel.
+    const lanBase = getCachedLanBase();
+    if (lanBase) return lanBase;
   }
   // Same-origin fallback (dev vite proxy / production Express)
   return '';
@@ -142,14 +186,32 @@ async function refreshSession() {
   if (!refreshingPromise) {
     refreshingPromise = (async () => {
       const base = getApiBase();
-      const res = await fetch(`${base}/api/auth/refresh`, {
-        method: 'POST',
-        credentials: base ? 'include' : 'same-origin',
-      });
-      if (!res.ok) return null;
-      const data = await res.json();
-      if (data.token) setToken(data.token);
-      return data;
+      let lastError = null;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          const res = await fetch(`${base}/api/auth/refresh`, {
+            method: 'POST',
+            credentials: base ? 'include' : 'same-origin',
+          });
+          if (res.ok) {
+            const data = await res.json();
+            if (data.token) setToken(data.token);
+            return data;
+          }
+          // 503 = tunnel temporarily unavailable; treat as network error, retry
+          if (res.status === 503) {
+            lastError = new ApiError('Tunnel unavailable', 503);
+            await new Promise(r => setTimeout(r, 800 * (attempt + 1)));
+            continue;
+          }
+          // 401 = session truly expired; don't retry
+          if (res.status === 401) return null;
+          lastError = new ApiError(`Refresh failed (${res.status})`, res.status);
+        } catch (e) {
+          lastError = e instanceof ApiError ? e : new ApiError(e.message, undefined);
+        }
+      }
+      return null;
     })().finally(() => {
       refreshingPromise = null;
     });
