@@ -4,7 +4,8 @@ import { api, getFileUrl } from '../utils/api';
 import {
   Building2, Users, Bed, Truck, Droplet, Package,
   UserPlus, Plus, Search, Calendar, ChevronRight, AlertTriangle,
-  Activity, Pill, FlaskConical, Stethoscope, QrCode
+  Activity, Pill, FlaskConical, Stethoscope, QrCode,
+  CheckCircle2, XCircle, Clock, FileText, MapPin, Filter, Check, X, FileCheck, Printer, History, ShieldAlert, Scissors
 } from 'lucide-react';
 import QRCode from 'qrcode';
 
@@ -163,8 +164,34 @@ export default function AdminDashboard() {
   // Inventory movement State
   const [invMove, setInvMove] = useState({ itemId: '', type: 'Received', qty: 1, notes: '' });
 
-  // Surgery Register State
+  // Surgery Register & OT Management State
   const [surgForm, setSurgForm] = useState({ patientId: '', procedure: '', doctorId: '', theatre: 'OT-01', time: '' });
+  const [surgFilterTab, setSurgFilterTab] = useState('active'); // 'active' | 'completed' | 'cancelled' | 'all'
+  const [surgSearch, setSurgSearch] = useState('');
+  const [surgTheatreFilter, setSurgTheatreFilter] = useState('ALL');
+  const [surgActionLoading, setSurgActionLoading] = useState(false);
+
+  // Modals for surgery operations
+  const [surgCompleteModal, setSurgCompleteModal] = useState({
+    open: false,
+    surgery: null,
+    outcome: 'Successful',
+    notes: '',
+    durationMinutes: 60,
+    operatingTheatre: 'OT-01',
+    doctorId: '',
+    completedAt: ''
+  });
+  const [surgCancelModal, setSurgCancelModal] = useState({
+    open: false,
+    surgery: null,
+    cancellationReason: 'Patient hemodynamically unstable',
+    customReason: ''
+  });
+  const [surgDetailModal, setSurgDetailModal] = useState({
+    open: false,
+    surgery: null
+  });
   const doctorsList = doctors;
 
   // QR Code render
@@ -734,15 +761,63 @@ export default function AdminDashboard() {
       await api.post('/surgeries', {
         patientId: surgForm.patientId,
         procedure: surgForm.procedure,
-        doctorId: surgForm.doctorId,
-        operatingTheatre: surgForm.theatre,
+        doctorId: surgForm.doctorId || doctorsList[0]?.id || doctorsList[0]?.doctorId || '',
+        operatingTheatre: surgForm.theatre || 'OT-01',
         time: surgForm.time
       });
       addToast('Surgery booked and clinical schedule updated.', 'success');
-      setSurgForm({ patientId: '', procedure: '', doctorId: doctorsList[0]?.id || '', theatre: 'OT-01', time: '' });
+      setSurgForm({ patientId: '', procedure: '', doctorId: doctorsList[0]?.id || doctorsList[0]?.doctorId || '', theatre: 'OT-01', time: '' });
       refreshData();
     } catch (err) {
       addToast(err.message, 'error');
+    }
+  };
+
+  const handleMarkCompleteSurgery = async (e) => {
+    e.preventDefault();
+    if (!surgCompleteModal.surgery) return;
+    setSurgActionLoading(true);
+    try {
+      const sid = surgCompleteModal.surgery.surgeryId;
+      await api.patch(`/surgeries/${sid}/status`, {
+        status: 'COMPLETED',
+        outcome: surgCompleteModal.outcome || 'Successful',
+        notes: surgCompleteModal.notes || '',
+        durationMinutes: surgCompleteModal.durationMinutes || 60,
+        operatingTheatre: surgCompleteModal.operatingTheatre || surgCompleteModal.surgery.operatingTheatre,
+        doctorId: surgCompleteModal.doctorId || surgCompleteModal.surgery.doctorId,
+        completedAt: surgCompleteModal.completedAt || new Date().toISOString()
+      });
+      addToast(`Surgery ${sid} recorded as COMPLETED. Surgical log updated.`, 'success');
+      setSurgCompleteModal({ open: false, surgery: null, outcome: 'Successful', notes: '', durationMinutes: 60, operatingTheatre: 'OT-01', doctorId: '', completedAt: '' });
+      refreshData();
+    } catch (err) {
+      addToast(err.message || 'Failed to update surgery status', 'error');
+    } finally {
+      setSurgActionLoading(false);
+    }
+  };
+
+  const handleCancelSurgery = async (e) => {
+    e.preventDefault();
+    if (!surgCancelModal.surgery) return;
+    setSurgActionLoading(true);
+    try {
+      const sid = surgCancelModal.surgery.surgeryId;
+      const reason = surgCancelModal.cancellationReason === 'Other'
+        ? (surgCancelModal.customReason || 'Cancelled by clinical administration')
+        : (surgCancelModal.cancellationReason || 'Cancelled by clinical administration');
+      await api.patch(`/surgeries/${sid}/status`, {
+        status: 'CANCELLED',
+        cancellationReason: reason
+      });
+      addToast(`Surgery ${sid} cancelled. Case record archived.`, 'info');
+      setSurgCancelModal({ open: false, surgery: null, cancellationReason: 'Patient hemodynamically unstable', customReason: '' });
+      refreshData();
+    } catch (err) {
+      addToast(err.message || 'Failed to cancel surgery', 'error');
+    } finally {
+      setSurgActionLoading(false);
     }
   };
 
@@ -2826,36 +2901,391 @@ export default function AdminDashboard() {
             <div className="space-y-8">
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
 
-                {/* Surgeries grid list */}
+                {/* Surgeries grid list with complete log & status filtering */}
                 <div
-                  className="lg:col-span-2 bg-canvas border border-hairline p-6"
+                  className="lg:col-span-2 bg-canvas border border-hairline p-6 space-y-6"
                   style={{ borderRadius: '18px' }}
                 >
-                  <h3 className="text-xs text-ink-muted-48 tracking-widest uppercase mb-4 font-semibold">Active Surgery Allocations</h3>
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-hairline">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <Scissors size={16} className="text-primary" />
+                        <h3 className="text-xs text-ink-muted-48 tracking-widest uppercase font-bold">Operating Theatre & Surgical Log</h3>
+                      </div>
+                      <p className="text-xs text-ink-muted-48 mt-1">Live surgical scheduling, intra-op management, and complete archival log of all completed and cancelled procedures.</p>
+                    </div>
+                  </div>
 
-                  {surgeries.length === 0 ? (
-                    <div className="text-xs text-ink-muted-48 py-12 text-center">No surgeries booked.</div>
-                  ) : (
-                    <div className="divide-y divide-hairline">
-                      {surgeries.map(s => (
-                        <div key={s.surgeryId} className="py-4 flex justify-between items-center">
-                          <div>
-                            <span className="text-xs text-ink-muted-48 uppercase block font-mono">{s.surgeryId}</span>
-                            <h4 className="text-base font-semibold text-ink">{s.procedure}</h4>
-                            <div className="text-xs text-ink-muted-85 mt-1">
-                              Patient ID: <span className="font-mono">{s.patientId}</span> ({s.patientName}) • Doctor: {s.doctorName}
-                            </div>
+                  {/* Filter Tabs */}
+                  {(() => {
+                    const activeCount = surgeries.filter(s => (s.status || 'SCHEDULED') === 'SCHEDULED' || s.status === 'IN_PROGRESS').length;
+                    const completedCount = surgeries.filter(s => s.status === 'COMPLETED').length;
+                    const cancelledCount = surgeries.filter(s => s.status === 'CANCELLED').length;
+                    const totalCount = surgeries.length;
+
+                    const displayed = surgeries.filter(s => {
+                      const st = (s.status || 'SCHEDULED').toUpperCase();
+                      if (surgFilterTab === 'active' && st !== 'SCHEDULED' && st !== 'IN_PROGRESS') return false;
+                      if (surgFilterTab === 'completed' && st !== 'COMPLETED') return false;
+                      if (surgFilterTab === 'cancelled' && st !== 'CANCELLED') return false;
+
+                      if (surgTheatreFilter !== 'ALL' && s.operatingTheatre !== surgTheatreFilter) return false;
+
+                      if (surgSearch.trim()) {
+                        const q = surgSearch.trim().toLowerCase();
+                        const proc = (s.procedure || '').toLowerCase();
+                        const pName = (s.patientName || '').toLowerCase();
+                        const pId = (s.patientId || '').toLowerCase();
+                        const dName = (s.doctorName || s.performedBy?.doctorName || '').toLowerCase();
+                        const sId = (s.surgeryId || '').toLowerCase();
+                        const ot = (s.operatingTheatre || '').toLowerCase();
+                        return proc.includes(q) || pName.includes(q) || pId.includes(q) || dName.includes(q) || sId.includes(q) || ot.includes(q);
+                      }
+                      return true;
+                    });
+
+                    return (
+                      <div className="space-y-4">
+                        {/* Tab Pills */}
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setSurgFilterTab('active')}
+                            className={`px-3.5 py-1.5 text-xs font-semibold rounded-full cursor-pointer transition-all ${
+                              surgFilterTab === 'active'
+                                ? 'bg-ink text-canvas shadow-sm'
+                                : 'bg-canvas-parchment hover:bg-canvas border border-hairline text-ink-muted-85'
+                            }`}
+                          >
+                            Active & Scheduled ({activeCount})
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setSurgFilterTab('completed')}
+                            className={`px-3.5 py-1.5 text-xs font-semibold rounded-full cursor-pointer transition-all ${
+                              surgFilterTab === 'completed'
+                                ? 'bg-[#0066cc] text-white shadow-sm'
+                                : 'bg-canvas-parchment hover:bg-canvas border border-hairline text-ink-muted-85'
+                            }`}
+                          >
+                            Completed Operations Log ({completedCount})
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setSurgFilterTab('cancelled')}
+                            className={`px-3.5 py-1.5 text-xs font-semibold rounded-full cursor-pointer transition-all ${
+                              surgFilterTab === 'cancelled'
+                                ? 'bg-[#cf2d56] text-white shadow-sm'
+                                : 'bg-canvas-parchment hover:bg-canvas border border-hairline text-ink-muted-85'
+                            }`}
+                          >
+                            Cancelled Cases ({cancelledCount})
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setSurgFilterTab('all')}
+                            className={`px-3.5 py-1.5 text-xs font-semibold rounded-full cursor-pointer transition-all ${
+                              surgFilterTab === 'all'
+                                ? 'bg-ink text-canvas shadow-sm'
+                                : 'bg-canvas-parchment hover:bg-canvas border border-hairline text-ink-muted-85'
+                            }`}
+                          >
+                            All Records ({totalCount})
+                          </button>
+                        </div>
+
+                        {/* Search and Theatre filters */}
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                          <div className="sm:col-span-2 relative">
+                            <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-muted-48" />
+                            <input
+                              type="text"
+                              value={surgSearch}
+                              onChange={e => setSurgSearch(e.target.value)}
+                              placeholder="Search by procedure, patient, doctor, or surgery ID..."
+                              className="w-full pl-9 pr-3 py-2 text-xs rounded-full border border-hairline bg-canvas focus:outline-none focus:border-primary"
+                              style={{ borderRadius: '20px' }}
+                            />
+                            {surgSearch && (
+                              <button
+                                type="button"
+                                onClick={() => setSurgSearch('')}
+                                className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-muted-48 hover:text-ink text-xs cursor-pointer"
+                              >
+                                ✕
+                              </button>
+                            )}
                           </div>
-                          <div className="text-right">
-                            <span className="text-xs font-semibold px-2.5 py-1 bg-canvas-parchment border border-hairline rounded-full">
-                              {s.operatingTheatre}
-                            </span>
-                            <span className="text-[11px] text-ink-muted-48 block mt-2">{s.time}</span>
+                          <div>
+                            <select
+                              value={surgTheatreFilter}
+                              onChange={e => setSurgTheatreFilter(e.target.value)}
+                              className="w-full py-2 px-3 text-xs rounded-full border border-hairline bg-canvas focus:outline-none focus:border-primary"
+                              style={{ borderRadius: '20px' }}
+                            >
+                              <option value="ALL">All Theatres (ALL)</option>
+                              <option value="OT-01">OT-01 (General & Laparoscopy)</option>
+                              <option value="OT-02">OT-02 (Cardiothoracic & Ortho)</option>
+                              <option value="OT-03">OT-03 (Neuro & Trauma)</option>
+                            </select>
                           </div>
                         </div>
-                      ))}
-                    </div>
-                  )}
+
+                        {/* Surgeries List */}
+                        {displayed.length === 0 ? (
+                          <div className="text-xs text-ink-muted-48 py-14 text-center border border-dashed border-hairline rounded-2xl bg-canvas-parchment/30">
+                            <Scissors size={28} className="mx-auto mb-2 text-ink-muted-48 opacity-40" />
+                            <p className="font-semibold text-ink">No surgeries found matching current filters.</p>
+                            <p className="text-[11px] text-ink-muted-48 mt-1">
+                              {surgFilterTab === 'completed'
+                                ? 'No completed operations have been logged yet.'
+                                : surgFilterTab === 'cancelled'
+                                ? 'No cancelled surgery records.'
+                                : 'Schedule a new surgery or adjust search criteria.'}
+                            </p>
+                          </div>
+                        ) : (
+                          <div className="space-y-4">
+                            {displayed.map(s => {
+                              const st = (s.status || 'SCHEDULED').toUpperCase();
+                              const isCompleted = st === 'COMPLETED';
+                              const isCancelled = st === 'CANCELLED';
+
+                              return (
+                                <div
+                                  key={s.surgeryId}
+                                  className={`p-5 rounded-2xl border transition-all ${
+                                    isCompleted
+                                      ? 'bg-canvas border-emerald-200/80 hover:border-emerald-300'
+                                      : isCancelled
+                                      ? 'bg-canvas border-rose-200/80 hover:border-rose-300 opacity-90'
+                                      : 'bg-canvas border-hairline hover:border-hairline-strong'
+                                  }`}
+                                  style={{ borderRadius: '18px' }}
+                                >
+                                  {/* Top header row */}
+                                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-hairline/60">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      <span className="text-xs font-mono font-bold text-ink-muted-48 uppercase bg-canvas-parchment px-2 py-0.5 rounded border border-hairline">
+                                        {s.surgeryId}
+                                      </span>
+                                      <h4 className="text-sm font-bold text-ink">{s.procedure}</h4>
+
+                                      {/* Status Badge */}
+                                      {isCompleted ? (
+                                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                          <CheckCircle2 size={12} />
+                                          Completed
+                                        </span>
+                                      ) : isCancelled ? (
+                                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-rose-50 text-[#cf2d56] border border-rose-200">
+                                          <XCircle size={12} />
+                                          Cancelled
+                                        </span>
+                                      ) : st === 'IN_PROGRESS' ? (
+                                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+                                          <Activity size={12} />
+                                          Intra-Operative
+                                        </span>
+                                      ) : (
+                                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-blue-50 text-[#0066cc] border border-blue-200">
+                                          <Clock size={12} />
+                                          Scheduled
+                                        </span>
+                                      )}
+
+                                      {/* Outcome Badge if completed */}
+                                      {isCompleted && s.outcome && (
+                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-canvas-parchment border border-hairline text-ink-muted-85">
+                                          Outcome: {s.outcome}
+                                        </span>
+                                      )}
+                                    </div>
+
+                                    <div className="flex items-center gap-2 self-start sm:self-auto">
+                                      <span className="text-xs font-semibold px-2.5 py-1 bg-canvas-parchment border border-hairline rounded-full inline-flex items-center gap-1">
+                                        <MapPin size={11} className="text-primary" />
+                                        {s.operatingTheatre}
+                                      </span>
+                                      <span className="text-[11px] text-ink-muted-48 font-mono">
+                                        {s.time}
+                                      </span>
+                                    </div>
+                                  </div>
+
+                                  {/* Full 4-Column Clinical Record Matrix for Completed Surgeries */}
+                                  {isCompleted ? (
+                                    <div className="mt-3.5 space-y-3">
+                                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 bg-canvas-parchment/50 p-3.5 rounded-xl border border-hairline">
+                                        <div>
+                                          <span className="text-[10px] uppercase font-bold text-ink-muted-48 tracking-wider block">Patient</span>
+                                          <div className="text-xs font-semibold text-ink mt-0.5">{s.patientName || s.patientId}</div>
+                                          <div className="text-[11px] text-ink-muted-48 font-mono">ID: {s.patientId}</div>
+                                        </div>
+
+                                        <div>
+                                          <span className="text-[10px] uppercase font-bold text-ink-muted-48 tracking-wider block">Surgeon Performed</span>
+                                          <div className="text-xs font-semibold text-ink mt-0.5">
+                                            {s.performedBy?.doctorName || s.doctorName || 'Assigned Surgeon'}
+                                          </div>
+                                          <div className="text-[11px] text-ink-muted-48">
+                                            {s.performedBy?.specialty || s.doctorSpecialty || 'General Surgery'}
+                                          </div>
+                                        </div>
+
+                                        <div>
+                                          <span className="text-[10px] uppercase font-bold text-ink-muted-48 tracking-wider block">Location (Where)</span>
+                                          <div className="text-xs font-semibold text-ink mt-0.5">{s.operatingTheatre}</div>
+                                          <div className="text-[11px] text-ink-muted-48">Halo Surgical Suite</div>
+                                        </div>
+
+                                        <div>
+                                          <span className="text-[10px] uppercase font-bold text-ink-muted-48 tracking-wider block">Timing & Duration</span>
+                                          <div className="text-xs font-semibold text-ink mt-0.5">
+                                            {s.durationMinutes || 60} mins duration
+                                          </div>
+                                          <div className="text-[11px] text-ink-muted-48">
+                                            {s.completedAt ? new Date(s.completedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : s.time}
+                                          </div>
+                                        </div>
+                                      </div>
+
+                                      {/* Operative notes if present */}
+                                      {s.notes && (
+                                        <div className="bg-canvas border border-hairline p-3 rounded-xl text-xs text-ink-muted-85">
+                                          <span className="font-semibold text-ink block mb-0.5 flex items-center gap-1.5">
+                                            <FileText size={12} className="text-primary" /> Operative Notes & Observations:
+                                          </span>
+                                          <p className="font-mono text-[11px] leading-relaxed text-ink-muted-85 whitespace-pre-wrap">{s.notes}</p>
+                                        </div>
+                                      )}
+
+                                      {/* Footer Actions for Completed Surgery */}
+                                      <div className="flex justify-between items-center pt-1 text-xs">
+                                        <span className="text-[11px] text-ink-muted-48">
+                                          Archived on {s.completedAt ? new Date(s.completedAt).toLocaleDateString() : 'Record'}
+                                        </span>
+                                        <button
+                                          type="button"
+                                          onClick={() => setSurgDetailModal({ open: true, surgery: s })}
+                                          className="inline-flex items-center gap-1.5 px-3 py-1 bg-canvas hover:bg-canvas-parchment text-ink border border-hairline font-semibold rounded-full transition-all cursor-pointer text-xs"
+                                        >
+                                          <FileText size={12} className="text-primary" />
+                                          View Full Case Sheet
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ) : isCancelled ? (
+                                    /* Cancelled Case Details */
+                                    <div className="mt-3.5 space-y-3">
+                                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-canvas-parchment/40 p-3 rounded-xl border border-hairline text-xs">
+                                        <div>
+                                          <span className="text-[10px] uppercase font-bold text-ink-muted-48 tracking-wider block">Patient</span>
+                                          <span className="font-semibold text-ink">{s.patientName || s.patientId}</span> ({s.patientId})
+                                        </div>
+                                        <div>
+                                          <span className="text-[10px] uppercase font-bold text-ink-muted-48 tracking-wider block">Scheduled Surgeon</span>
+                                          <span className="font-semibold text-ink">{s.doctorName}</span>
+                                        </div>
+                                        <div>
+                                          <span className="text-[10px] uppercase font-bold text-ink-muted-48 tracking-wider block">Original Slot</span>
+                                          <span>{s.operatingTheatre} • {s.time}</span>
+                                        </div>
+                                      </div>
+
+                                      <div className="bg-rose-50/80 border border-rose-200/90 rounded-xl p-3 text-xs text-rose-900">
+                                        <div className="font-semibold flex items-center gap-1.5">
+                                          <ShieldAlert size={13} className="text-[#cf2d56]" />
+                                          Cancellation Reason: {s.cancellationReason || 'Patient hemodynamically unstable / postponed'}
+                                        </div>
+                                        <div className="text-[11px] text-rose-700/80 mt-1">
+                                          Cancelled: {s.cancelledAt ? new Date(s.cancelledAt).toLocaleString() : 'Logged in audit trail'} • Actor: {s.cancelledBy || 'Hospital Administration'}
+                                        </div>
+                                      </div>
+
+                                      <div className="flex justify-end pt-1">
+                                        <button
+                                          type="button"
+                                          onClick={() => setSurgDetailModal({ open: true, surgery: s })}
+                                          className="inline-flex items-center gap-1.5 px-3 py-1 bg-canvas hover:bg-canvas-parchment text-ink border border-hairline font-semibold rounded-full transition-all cursor-pointer text-xs"
+                                        >
+                                          <FileText size={12} />
+                                          View Cancellation Sheet
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    /* Active / Scheduled Surgery Details & Action Controls */
+                                    <div className="mt-3.5 space-y-3">
+                                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-canvas-parchment/40 p-3 rounded-xl border border-hairline text-xs">
+                                        <div>
+                                          <span className="text-[10px] uppercase font-bold text-ink-muted-48 tracking-wider block">Patient</span>
+                                          <span className="font-semibold text-ink">{s.patientName || s.patientId}</span>
+                                          <span className="text-[11px] text-ink-muted-48 block font-mono">ID: {s.patientId}</span>
+                                        </div>
+                                        <div>
+                                          <span className="text-[10px] uppercase font-bold text-ink-muted-48 tracking-wider block">Assigned Surgeon</span>
+                                          <span className="font-semibold text-ink">{s.doctorName}</span>
+                                          <span className="text-[11px] text-ink-muted-48 block">{s.doctorSpecialty || 'General Surgery'}</span>
+                                        </div>
+                                        <div>
+                                          <span className="text-[10px] uppercase font-bold text-ink-muted-48 tracking-wider block">Operating Room</span>
+                                          <span className="font-semibold text-ink">{s.operatingTheatre}</span>
+                                          <span className="text-[11px] text-ink-muted-48 block">Scheduled: {s.time}</span>
+                                        </div>
+                                      </div>
+
+                                      {/* Action buttons to Mark Complete, Cancel, or View Details */}
+                                      <div className="flex flex-wrap items-center justify-end gap-2 pt-1 border-t border-hairline/60">
+                                        <button
+                                          type="button"
+                                          onClick={() => setSurgDetailModal({ open: true, surgery: s })}
+                                          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-canvas hover:bg-canvas-parchment text-ink border border-hairline text-xs font-semibold rounded-full transition-all cursor-pointer"
+                                        >
+                                          <FileText size={12} />
+                                          <span>Case Info</span>
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => setSurgCancelModal({
+                                            open: true,
+                                            surgery: s,
+                                            cancellationReason: 'Patient hemodynamically unstable',
+                                            customReason: ''
+                                          })}
+                                          className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-canvas-parchment hover:bg-rose-50 text-[#cf2d56] border border-hairline hover:border-rose-300 text-xs font-semibold rounded-full transition-all cursor-pointer"
+                                        >
+                                          <XCircle size={13} />
+                                          <span>Cancel Surgery</span>
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => setSurgCompleteModal({
+                                            open: true,
+                                            surgery: s,
+                                            outcome: 'Successful',
+                                            notes: '',
+                                            durationMinutes: 60,
+                                            operatingTheatre: s.operatingTheatre || 'OT-01',
+                                            doctorId: s.doctorId || (doctorsList[0]?.id || doctorsList[0]?.doctorId || ''),
+                                            completedAt: new Date().toISOString().slice(0, 16)
+                                          })}
+                                          className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-[#0066cc] hover:bg-[#0055b3] text-white text-xs font-semibold rounded-full transition-all shadow-sm cursor-pointer"
+                                        >
+                                          <CheckCircle2 size={13} />
+                                          <span>Mark as Completed</span>
+                                        </button>
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 {/* Booking Form */}
@@ -3111,33 +3541,393 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {/* Full-Screen Super-Sized QR Code Zoom Modal */}
-      {showQrZoom && (
-        <div
-          className="fixed inset-0 bg-black/80 z-[100] flex justify-center items-center p-6 backdrop-blur-md cursor-pointer animate-fadeIn"
-          onClick={() => { setShowQrZoom(null); setZoomPatient(null); }}
-        >
+      {/* Surgery Completion Modal */}
+      {surgCompleteModal.open && surgCompleteModal.surgery && (
+        <div className="fixed inset-0 bg-black/60 z-[100] flex justify-center items-center p-4 backdrop-blur-sm">
           <div
-            className="bg-white p-8 rounded-3xl flex flex-col items-center max-w-md w-full shadow-2xl relative border border-hairline"
-            onClick={e => e.stopPropagation()}
+            className="bg-white border border-hairline p-6 max-w-lg w-full rounded-3xl shadow-2xl space-y-5 max-h-[90vh] overflow-y-auto"
+            style={{ borderRadius: '24px' }}
           >
-            <button
-              onClick={() => { setShowQrZoom(null); setZoomPatient(null); }}
-              className="absolute top-4 right-4 text-ink-muted-48 hover:text-ink text-xs font-bold bg-canvas-parchment border border-hairline px-3.5 py-1.5 rounded-full cursor-pointer"
-            >
-              ✕ Close
-            </button>
-            <span className="text-xs text-ink-muted-48 uppercase font-bold tracking-widest mb-1">High-Resolution Patient QR Pass</span>
-            <h3 className="text-lg font-bold text-ink mb-1">{zoomPatient?.name || selectedPatient?.name || activeCardPatient?.name || 'Clinical QR Pass'}</h3>
-            {(zoomPatient?.patientId || selectedPatient?.patientId) && (
-              <span className="text-[11px] text-ink-muted-48 font-mono mb-4">{zoomPatient?.patientId || selectedPatient?.patientId}</span>
-            )}
-            <div className="bg-white p-4 rounded-2xl border-2 border-hairline shadow-inner mb-4">
-              <img src={showQrZoom} alt="Enlarged QR Code" className="w-72 h-72 md:w-80 md:h-80 object-contain" />
+            <div className="flex justify-between items-start">
+              <div>
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 size={18} className="text-emerald-600" />
+                  <h3 className="text-sm font-bold text-ink uppercase tracking-wider">Mark Surgery as Completed</h3>
+                </div>
+                <p className="text-xs text-ink-muted-48 mt-1">Record surgical completion, operating doctor, and operative notes for the medical archive.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSurgCompleteModal({ open: false, surgery: null, outcome: 'Successful', notes: '', durationMinutes: 60, operatingTheatre: 'OT-01', doctorId: '', completedAt: '' })}
+                className="text-ink-muted-48 hover:text-ink text-xs font-bold bg-canvas-parchment border border-hairline px-2.5 py-1 rounded-full cursor-pointer"
+              >
+                ✕
+              </button>
             </div>
-            <p className="text-xs text-primary font-semibold text-center">
-              📷 Ready for instant rear-camera scanning by Doctor PWA
-            </p>
+
+            {/* Case Recap Pill */}
+            <div className="bg-canvas-parchment/60 p-3.5 rounded-2xl border border-hairline space-y-1 text-xs">
+              <div className="flex justify-between">
+                <span className="font-mono text-ink-muted-48 text-[11px] font-bold">{surgCompleteModal.surgery.surgeryId}</span>
+                <span className="font-semibold text-primary">{surgCompleteModal.surgery.operatingTheatre}</span>
+              </div>
+              <div className="text-sm font-bold text-ink">{surgCompleteModal.surgery.procedure}</div>
+              <div className="text-ink-muted-85 text-[11px]">
+                Patient: <span className="font-semibold">{surgCompleteModal.surgery.patientName || surgCompleteModal.surgery.patientId}</span> ({surgCompleteModal.surgery.patientId})
+              </div>
+            </div>
+
+            <form onSubmit={handleMarkCompleteSurgery} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-ink uppercase mb-1">Operating Surgeon (Performed By)</label>
+                <select
+                  value={surgCompleteModal.doctorId}
+                  onChange={e => setSurgCompleteModal({ ...surgCompleteModal, doctorId: e.target.value })}
+                  className="w-full text-xs h-10 px-3 rounded-full border border-hairline bg-canvas"
+                  style={{ borderRadius: '20px' }}
+                  required
+                >
+                  <option value="">-- Select Surgeon --</option>
+                  {doctorsList.map(d => (
+                    <option key={d.id || d._id} value={d.id || d._id}>
+                      {d.name} ({d.specialty})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-ink uppercase mb-1">Operating Theatre</label>
+                  <select
+                    value={surgCompleteModal.operatingTheatre}
+                    onChange={e => setSurgCompleteModal({ ...surgCompleteModal, operatingTheatre: e.target.value })}
+                    className="w-full text-xs h-10 px-3 rounded-full border border-hairline bg-canvas"
+                    style={{ borderRadius: '20px' }}
+                  >
+                    <option value="OT-01">OT-01</option>
+                    <option value="OT-02">OT-02</option>
+                    <option value="OT-03">OT-03</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-ink uppercase mb-1">Surgical Outcome</label>
+                  <select
+                    value={surgCompleteModal.outcome}
+                    onChange={e => setSurgCompleteModal({ ...surgCompleteModal, outcome: e.target.value })}
+                    className="w-full text-xs h-10 px-3 rounded-full border border-hairline bg-canvas"
+                    style={{ borderRadius: '20px' }}
+                  >
+                    <option value="Successful">Successful</option>
+                    <option value="Successful with minor complications">Minor Complications</option>
+                    <option value="Transferred to ICU post-op">Transferred to ICU</option>
+                    <option value="Partial procedure completed">Partial Procedure</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-ink uppercase mb-1">Duration (Minutes)</label>
+                  <input
+                    type="number"
+                    min="5"
+                    max="1440"
+                    value={surgCompleteModal.durationMinutes}
+                    onChange={e => setSurgCompleteModal({ ...surgCompleteModal, durationMinutes: parseInt(e.target.value) || 60 })}
+                    className="w-full text-xs px-3 py-2 rounded-full border border-hairline bg-canvas"
+                    style={{ borderRadius: '20px' }}
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-ink uppercase mb-1">Completion Time</label>
+                  <input
+                    type="datetime-local"
+                    value={surgCompleteModal.completedAt}
+                    onChange={e => setSurgCompleteModal({ ...surgCompleteModal, completedAt: e.target.value })}
+                    className="w-full text-xs px-3 py-2 rounded-full border border-hairline bg-canvas"
+                    style={{ borderRadius: '20px' }}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-ink uppercase mb-1">Operative Notes & Post-Op Plan</label>
+                <textarea
+                  rows="3"
+                  value={surgCompleteModal.notes}
+                  onChange={e => setSurgCompleteModal({ ...surgCompleteModal, notes: e.target.value })}
+                  placeholder="e.g. Procedure uneventful. Hemostasis secured. Patient extubated and shifted to PACU."
+                  className="w-full text-xs p-3 rounded-xl border border-hairline bg-canvas font-mono focus:outline-none focus:border-primary"
+                  style={{ borderRadius: '14px' }}
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setSurgCompleteModal({ open: false, surgery: null, outcome: 'Successful', notes: '', durationMinutes: 60, operatingTheatre: 'OT-01', doctorId: '', completedAt: '' })}
+                  className="px-4 py-2 text-xs font-semibold rounded-full border border-hairline hover:bg-canvas-parchment cursor-pointer text-ink"
+                  style={{ borderRadius: '20px' }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={surgActionLoading}
+                  className="px-5 py-2 text-xs font-bold rounded-full bg-[#0066cc] hover:bg-[#0055b3] text-white shadow-sm cursor-pointer disabled:opacity-50 transition-all flex items-center gap-1.5"
+                  style={{ borderRadius: '20px' }}
+                >
+                  <CheckCircle2 size={13} />
+                  <span>{surgActionLoading ? 'Recording...' : 'Confirm & Mark Completed'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Surgery Cancellation Modal */}
+      {surgCancelModal.open && surgCancelModal.surgery && (
+        <div className="fixed inset-0 bg-black/60 z-[100] flex justify-center items-center p-4 backdrop-blur-sm">
+          <div
+            className="bg-white border border-hairline p-6 max-w-md w-full rounded-3xl shadow-2xl space-y-5"
+            style={{ borderRadius: '24px' }}
+          >
+            <div className="flex justify-between items-start">
+              <div>
+                <div className="flex items-center gap-2">
+                  <XCircle size={18} className="text-[#cf2d56]" />
+                  <h3 className="text-sm font-bold text-ink uppercase tracking-wider">Cancel Surgery Allocation</h3>
+                </div>
+                <p className="text-xs text-ink-muted-48 mt-1">Specify clinical or administrative rationale for cancelling this scheduled surgery.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSurgCancelModal({ open: false, surgery: null, cancellationReason: 'Patient hemodynamically unstable', customReason: '' })}
+                className="text-ink-muted-48 hover:text-ink text-xs font-bold bg-canvas-parchment border border-hairline px-2.5 py-1 rounded-full cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Case Recap Pill */}
+            <div className="bg-canvas-parchment/60 p-3.5 rounded-2xl border border-hairline space-y-1 text-xs">
+              <div className="font-mono text-ink-muted-48 text-[11px] font-bold">{surgCancelModal.surgery.surgeryId}</div>
+              <div className="text-sm font-bold text-ink">{surgCancelModal.surgery.procedure}</div>
+              <div className="text-ink-muted-85 text-[11px]">
+                Patient: <span className="font-semibold">{surgCancelModal.surgery.patientName || surgCancelModal.surgery.patientId}</span> • Surgeon: {surgCancelModal.surgery.doctorName}
+              </div>
+            </div>
+
+            <form onSubmit={handleCancelSurgery} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-ink uppercase mb-1">Reason for Cancellation</label>
+                <select
+                  value={surgCancelModal.cancellationReason}
+                  onChange={e => setSurgCancelModal({ ...surgCancelModal, cancellationReason: e.target.value })}
+                  className="w-full text-xs h-10 px-3 rounded-full border border-hairline bg-canvas"
+                  style={{ borderRadius: '20px' }}
+                >
+                  <option value="Patient hemodynamically unstable">Patient hemodynamically unstable</option>
+                  <option value="Emergency surgical rescheduling">Emergency surgical rescheduling</option>
+                  <option value="Pre-op diagnostic anomaly / contraindicated">Pre-op diagnostic anomaly / contraindicated</option>
+                  <option value="Equipment / Theatre maintenance required">Equipment / Theatre maintenance required</option>
+                  <option value="Patient / Family requested postponement">Patient / Family requested postponement</option>
+                  <option value="Other">Other (Specify below)</option>
+                </select>
+              </div>
+
+              {surgCancelModal.cancellationReason === 'Other' && (
+                <div>
+                  <label className="block text-xs font-semibold text-ink uppercase mb-1">Detailed Reason</label>
+                  <input
+                    type="text"
+                    required
+                    value={surgCancelModal.customReason}
+                    onChange={e => setSurgCancelModal({ ...surgCancelModal, customReason: e.target.value })}
+                    placeholder="Enter specific clinical / administrative reason..."
+                    className="w-full text-xs px-3 py-2 rounded-full border border-hairline bg-canvas"
+                    style={{ borderRadius: '20px' }}
+                  />
+                </div>
+              )}
+
+              <p className="text-[11px] text-[#cf2d56] bg-rose-50 p-2.5 rounded-xl border border-rose-200">
+                This surgery will be marked as CANCELLED and preserved in the hospital audit logs.
+              </p>
+
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setSurgCancelModal({ open: false, surgery: null, cancellationReason: 'Patient hemodynamically unstable', customReason: '' })}
+                  className="px-4 py-2 text-xs font-semibold rounded-full border border-hairline hover:bg-canvas-parchment cursor-pointer text-ink"
+                  style={{ borderRadius: '20px' }}
+                >
+                  Keep Scheduled
+                </button>
+                <button
+                  type="submit"
+                  disabled={surgActionLoading}
+                  className="px-5 py-2 text-xs font-bold rounded-full bg-[#cf2d56] hover:bg-[#b02245] text-white shadow-sm cursor-pointer disabled:opacity-50 transition-all flex items-center gap-1.5"
+                  style={{ borderRadius: '20px' }}
+                >
+                  <XCircle size={13} />
+                  <span>{surgActionLoading ? 'Cancelling...' : 'Confirm Cancellation'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Surgical Case Details & Print Sheet Modal */}
+      {surgDetailModal.open && surgDetailModal.surgery && (
+        <div className="fixed inset-0 bg-black/70 z-[100] flex justify-center items-center p-4 backdrop-blur-sm">
+          <div
+            className="bg-white border border-hairline max-w-2xl w-full rounded-3xl shadow-2xl max-h-[90vh] flex flex-col overflow-hidden"
+            style={{ borderRadius: '24px' }}
+          >
+            {/* Modal Header */}
+            <div className="flex justify-between items-center p-5 border-b border-hairline bg-canvas-parchment/30">
+              <div className="flex items-center gap-2">
+                <FileCheck size={18} className="text-primary" />
+                <div>
+                  <h3 className="text-sm font-bold text-ink uppercase tracking-wider">HALO Surgical Case Sheet</h3>
+                  <span className="text-[11px] text-ink-muted-48">Permanent Clinical & Operating Theatre Record</span>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-full bg-canvas border border-hairline hover:bg-canvas-parchment cursor-pointer text-ink transition-all"
+                >
+                  <Printer size={12} />
+                  <span>Print Sheet</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSurgDetailModal({ open: false, surgery: null })}
+                  className="text-ink-muted-48 hover:text-ink text-xs font-bold bg-canvas-parchment border border-hairline px-3 py-1.5 rounded-full cursor-pointer"
+                >
+                  ✕ Close
+                </button>
+              </div>
+            </div>
+
+            {/* Case Sheet Printable Area */}
+            <div className="p-6 overflow-y-auto space-y-6">
+              {/* Hospital Header */}
+              <div className="border-b-2 border-hairline pb-4 flex justify-between items-start">
+                <div>
+                  <h2 className="text-base font-extrabold text-ink tracking-tight">HALO ADVANCED HEALTHCARE NETWORK</h2>
+                  <p className="text-xs text-ink-muted-48">Department of Surgical Sciences & Peri-Operative Care</p>
+                  <p className="text-[11px] text-ink-muted-48">Suite: {surgDetailModal.surgery.operatingTheatre} • Surgical Wing</p>
+                </div>
+                <div className="text-right">
+                  <span className="font-mono text-xs font-bold text-ink block">{surgDetailModal.surgery.surgeryId}</span>
+                  <span className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold mt-1 uppercase ${
+                    surgDetailModal.surgery.status === 'COMPLETED'
+                      ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                      : surgDetailModal.surgery.status === 'CANCELLED'
+                      ? 'bg-rose-50 text-[#cf2d56] border border-rose-200'
+                      : 'bg-blue-50 text-[#0066cc] border border-blue-200'
+                  }`}>
+                    {surgDetailModal.surgery.status || 'SCHEDULED'}
+                  </span>
+                </div>
+              </div>
+
+              {/* 4 Quadrants: Patient, Surgeon, Timing, Location */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="p-3.5 rounded-2xl bg-canvas-parchment/50 border border-hairline space-y-1">
+                  <span className="text-[10px] uppercase font-bold text-ink-muted-48 tracking-widest block">Patient Demographics</span>
+                  <div className="text-sm font-bold text-ink">{surgDetailModal.surgery.patientName || surgDetailModal.surgery.patientId}</div>
+                  <div className="text-xs text-ink-muted-48 font-mono">Patient MRN: {surgDetailModal.surgery.patientId}</div>
+                </div>
+
+                <div className="p-3.5 rounded-2xl bg-canvas-parchment/50 border border-hairline space-y-1">
+                  <span className="text-[10px] uppercase font-bold text-ink-muted-48 tracking-widest block">Surgical Team</span>
+                  <div className="text-sm font-bold text-ink">
+                    {surgDetailModal.surgery.performedBy?.doctorName || surgDetailModal.surgery.doctorName || 'Assigned Surgeon'}
+                  </div>
+                  <div className="text-xs text-ink-muted-48">
+                    {surgDetailModal.surgery.performedBy?.specialty || surgDetailModal.surgery.doctorSpecialty || 'Consultant Surgeon'}
+                  </div>
+                  <div className="text-[11px] text-ink-muted-48 font-mono">Doctor ID: {surgDetailModal.surgery.performedBy?.doctorId || surgDetailModal.surgery.doctorId}</div>
+                </div>
+
+                <div className="p-3.5 rounded-2xl bg-canvas-parchment/50 border border-hairline space-y-1">
+                  <span className="text-[10px] uppercase font-bold text-ink-muted-48 tracking-widest block">Procedure & Location</span>
+                  <div className="text-sm font-bold text-ink">{surgDetailModal.surgery.procedure}</div>
+                  <div className="text-xs text-ink-muted-48">Room: {surgDetailModal.surgery.operatingTheatre} (Sterile Zone)</div>
+                </div>
+
+                <div className="p-3.5 rounded-2xl bg-canvas-parchment/50 border border-hairline space-y-1">
+                  <span className="text-[10px] uppercase font-bold text-ink-muted-48 tracking-widest block">Scheduling & Timing</span>
+                  <div className="text-xs font-semibold text-ink">Scheduled: {surgDetailModal.surgery.time}</div>
+                  {surgDetailModal.surgery.completedAt && (
+                    <div className="text-xs text-emerald-700 font-semibold">
+                      Completed: {new Date(surgDetailModal.surgery.completedAt).toLocaleString()}
+                    </div>
+                  )}
+                  {surgDetailModal.surgery.durationMinutes && (
+                    <div className="text-[11px] text-ink-muted-48">
+                      Duration: {surgDetailModal.surgery.durationMinutes} minutes
+                    </div>
+                  )}
+                  {surgDetailModal.surgery.outcome && (
+                    <div className="text-[11px] text-ink font-semibold">
+                      Outcome: {surgDetailModal.surgery.outcome}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Operative Notes if any */}
+              {surgDetailModal.surgery.notes && (
+                <div className="p-4 rounded-2xl bg-canvas border border-hairline space-y-2">
+                  <h4 className="text-xs uppercase font-bold text-ink tracking-wider flex items-center gap-1.5">
+                    <FileText size={13} className="text-primary" />
+                    Intra-Operative Record & Findings
+                  </h4>
+                  <p className="text-xs font-mono text-ink-muted-85 whitespace-pre-wrap leading-relaxed bg-canvas-parchment/40 p-3 rounded-xl border border-hairline">
+                    {surgDetailModal.surgery.notes}
+                  </p>
+                </div>
+              )}
+
+              {/* Cancellation rationale if cancelled */}
+              {surgDetailModal.surgery.status === 'CANCELLED' && (
+                <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-950 space-y-1 text-xs">
+                  <h4 className="font-bold flex items-center gap-1.5">
+                    <XCircle size={14} className="text-[#cf2d56]" />
+                    Cancellation Record
+                  </h4>
+                  <p><strong>Reason:</strong> {surgDetailModal.surgery.cancellationReason || 'Patient Unfit / Rescheduled'}</p>
+                  <p className="text-[11px] text-rose-800">
+                    Cancelled: {surgDetailModal.surgery.cancelledAt ? new Date(surgDetailModal.surgery.cancelledAt).toLocaleString() : 'Recorded in audit trail'} • Actor: {surgDetailModal.surgery.cancelledBy || 'Hospital Administration'}
+                  </p>
+                </div>
+              )}
+
+              {/* Legal / Clinical Sign-off Footer */}
+              <div className="pt-6 border-t border-hairline flex justify-between items-end text-ink-muted-48 text-[11px]">
+                <div>
+                  <p>Electronic Hospital Information System (e-HIS)</p>
+                  <p>Digitally signed by Operating Room Supervisor</p>
+                </div>
+                <div className="text-right">
+                  <p className="border-t border-hairline pt-1 px-4 font-mono font-semibold text-ink">
+                    {surgDetailModal.surgery.performedBy?.doctorName || surgDetailModal.surgery.doctorName || 'Attending Surgeon'}
+                  </p>
+                  <p>Primary Operating Surgeon Signature</p>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}

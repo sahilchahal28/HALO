@@ -18,3 +18,14 @@ export async function bookSurgery(req, res, next) {
     next(err);
   }
 }
+
+export async function updateSurgeryStatus(req, res, next) {
+  try {
+    const { surgeryId } = req.params;
+    const actor = req.user || { id: 'admin', name: 'Admin', role: 'ADMIN' };
+    const surgery = await surgeryService.updateSurgeryStatus(surgeryId, req.body, actor);
+    res.json(surgery);
+  } catch (err) {
+    next(err);
+  }
+}

@@ -9,7 +9,7 @@ import {
   Stethoscope, Calendar, Inbox, Search, LogOut, Sparkles, 
   AlertCircle, ShieldAlert, PhoneCall, PlusCircle, CheckCircle, FileText,
   Smartphone, Download, Users, Server, User, Pill, ClipboardList, History,
-  CheckCircle2, HeartPulse, Activity, MessageSquare
+  CheckCircle2, HeartPulse, Activity, MessageSquare, Scissors, XCircle, Clock, MapPin
 } from 'lucide-react';
 
 export default function DoctorDashboard() {
@@ -157,6 +157,67 @@ export default function DoctorDashboard() {
   // Document Upload Form State
   const [docForm, setDocForm] = useState({ title: '', type: 'LAB_REPORT' });
   const [uploadingDoc, setUploadingDoc] = useState(false);
+
+  // Doctor Surgery Action States
+  const [doctorSurgTab, setDoctorSurgTab] = useState('upcoming'); // 'upcoming' | 'completed'
+  const [doctorCompleteModal, setDoctorCompleteModal] = useState({
+    open: false,
+    surgery: null,
+    outcome: 'Successful',
+    notes: '',
+    durationMinutes: 60
+  });
+  const [doctorCancelModal, setDoctorCancelModal] = useState({
+    open: false,
+    surgery: null,
+    reason: 'Patient hemodynamically unstable'
+  });
+  const [submittingSurgAction, setSubmittingSurgAction] = useState(false);
+
+  const handleDoctorCompleteSurgery = async (e) => {
+    e.preventDefault();
+    if (!doctorCompleteModal.surgery) return;
+    setSubmittingSurgAction(true);
+    try {
+      const sid = doctorCompleteModal.surgery.surgeryId;
+      await api.patch(`/surgeries/${sid}/status`, {
+        status: 'COMPLETED',
+        outcome: doctorCompleteModal.outcome || 'Successful',
+        notes: doctorCompleteModal.notes || '',
+        durationMinutes: doctorCompleteModal.durationMinutes || 60,
+        doctorId: user?.id || user?._id || doctorCompleteModal.surgery.doctorId,
+        completedAt: new Date().toISOString()
+      });
+      addToast(`Surgery ${sid} logged as COMPLETED. Surgical record saved.`, 'success');
+      setDoctorCompleteModal({ open: false, surgery: null, outcome: 'Successful', notes: '', durationMinutes: 60 });
+      refreshData();
+    } catch (err) {
+      addToast(err.message || 'Failed to update surgery', 'error');
+    } finally {
+      setSubmittingSurgAction(false);
+    }
+  };
+
+  const handleDoctorCancelSurgery = async (e) => {
+    e.preventDefault();
+    if (!doctorCancelModal.surgery) return;
+    setSubmittingSurgAction(true);
+    try {
+      const sid = doctorCancelModal.surgery.surgeryId;
+      await api.patch(`/surgeries/${sid}/status`, {
+        status: 'CANCELLED',
+        cancellationReason: doctorCancelModal.reason || 'Cancelled by attending surgeon',
+        cancelledBy: user?.name ? `Dr. ${user.name}` : 'Attending Surgeon'
+      });
+      addToast(`Surgery ${sid} marked as CANCELLED.`, 'info');
+      setDoctorCancelModal({ open: false, surgery: null, reason: 'Patient hemodynamically unstable' });
+      refreshData();
+    } catch (err) {
+      addToast(err.message || 'Failed to cancel surgery', 'error');
+    } finally {
+      setSubmittingSurgAction(false);
+    }
+  };
 
   // Load patient active episode, documents, and timeline whenever selectedPatient changes
   useEffect(() => {
@@ -612,40 +673,161 @@ export default function DoctorDashboard() {
               </div>
             )}
 
-            {/* Schedule Feed — Dynamic events only */}
-            <div className="space-y-3">
-              <h3 className="text-[10px] text-ink-muted-48 tracking-widest uppercase mb-1 font-bold">Schedule & Events</h3>
+            {/* Surgical Feed & Case Management */}
+            {(() => {
+              const mySurgeries = surgeries.filter(s => 
+                s.doctorId === user?.id || s.doctorId === user?._id ||
+                s.performedBy?.doctorId === user?.id || s.performedBy?.doctorId === user?._id ||
+                (s.doctorName && user?.name && s.doctorName.toLowerCase().includes(user.name.toLowerCase()))
+              );
+              const upcomingSurgeries = mySurgeries.filter(s => (s.status || 'SCHEDULED') === 'SCHEDULED' || s.status === 'IN_PROGRESS');
+              const completedSurgeries = mySurgeries.filter(s => s.status === 'COMPLETED');
+              const displayList = doctorSurgTab === 'completed' ? completedSurgeries : upcomingSurgeries;
 
-              {/* Surgeries — real data from DB */}
-              {surgeries.filter(s => s.doctorId === user?.id || s.doctorId === user?._id).map(s => (
-                <div 
-                  key={s.surgeryId} 
-                  className="bg-canvas border border-primary/20 p-4 flex gap-4"
-                  style={{ borderRadius: '18px' }}
-                >
-                  <div className="text-right border-r border-primary/20 pr-3 shrink-0">
-                    <div className="text-sm font-semibold text-primary">{s.time.split(' ')[1] || 'OT'}</div>
-                    <div className="text-[10px] text-primary uppercase">Surgery</div>
+              return (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <Scissors size={14} className="text-primary" />
+                      <h3 className="text-[10px] text-ink-muted-48 tracking-widest uppercase font-bold">Operating Theatre & Surgeries</h3>
+                    </div>
+                    <div className="flex gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setDoctorSurgTab('upcoming')}
+                        className={`text-[10px] font-bold px-2.5 py-1 rounded-full cursor-pointer transition-all ${
+                          doctorSurgTab === 'upcoming'
+                            ? 'bg-ink text-canvas'
+                            : 'bg-canvas-parchment text-ink-muted-48 hover:text-ink border border-hairline'
+                        }`}
+                      >
+                        Upcoming ({upcomingSurgeries.length})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setDoctorSurgTab('completed')}
+                        className={`text-[10px] font-bold px-2.5 py-1 rounded-full cursor-pointer transition-all ${
+                          doctorSurgTab === 'completed'
+                            ? 'bg-[#0066cc] text-white'
+                            : 'bg-canvas-parchment text-ink-muted-48 hover:text-ink border border-hairline'
+                        }`}
+                      >
+                        Completed Log ({completedSurgeries.length})
+                      </button>
+                    </div>
                   </div>
-                  <div>
-                    <h4 className="text-sm font-semibold text-ink">Scheduled Surgery: {s.patientName}</h4>
-                    <p className="text-xs text-ink-muted-48 mt-1 leading-relaxed">{s.procedure} in Operating Room {s.operatingTheatre}.</p>
-                  </div>
-                </div>
-              ))}
 
-              {/* Empty state when no events */}
-              {surgeries.filter(s => s.doctorId === user?.id || s.doctorId === user?._id).length === 0 && (
-                <div 
-                  className="bg-canvas border border-hairline p-6 text-center text-xs text-ink-muted-48"
-                  style={{ borderRadius: '18px' }}
-                >
-                  <Calendar size={20} className="mx-auto mb-2 text-ink-muted-48" />
-                  <p>No scheduled events at this time.</p>
-                  <p className="text-[10px] mt-1">Events and rounds are managed by hospital administration.</p>
+                  {displayList.length === 0 ? (
+                    <div 
+                      className="bg-canvas border border-hairline p-6 text-center text-xs text-ink-muted-48"
+                      style={{ borderRadius: '18px' }}
+                    >
+                      <Calendar size={20} className="mx-auto mb-2 text-ink-muted-48" />
+                      <p>No {doctorSurgTab === 'completed' ? 'completed' : 'scheduled'} surgical cases for Dr. {user?.name || 'Doctor'}.</p>
+                      <p className="text-[10px] mt-1">Hospital OT allocations will appear here in real-time.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {displayList.map(s => {
+                        const isCompleted = s.status === 'COMPLETED';
+
+                        return (
+                          <div
+                            key={s.surgeryId}
+                            className={`p-4 border transition-all ${
+                              isCompleted
+                                ? 'bg-canvas border-emerald-200/80'
+                                : 'bg-canvas border-primary/20'
+                            }`}
+                            style={{ borderRadius: '18px' }}
+                          >
+                            <div className="flex justify-between items-start gap-2">
+                              <div>
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className="font-mono text-[10px] font-bold text-ink-muted-48">{s.surgeryId}</span>
+                                  {isCompleted ? (
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                      <CheckCircle2 size={11} /> Completed
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 text-[#0066cc] border border-blue-200">
+                                      <Clock size={11} /> Scheduled
+                                    </span>
+                                  )}
+                                  {isCompleted && s.outcome && (
+                                    <span className="text-[10px] text-ink-muted-85 px-1.5 py-0.5 rounded bg-canvas-parchment border border-hairline">
+                                      {s.outcome}
+                                    </span>
+                                  )}
+                                </div>
+                                <h4 className="text-sm font-semibold text-ink mt-1">{s.procedure}</h4>
+                                <div className="text-xs text-ink-muted-85 mt-0.5">
+                                  Patient: <strong className="text-ink">{s.patientName || s.patientId}</strong> ({s.patientId})
+                                </div>
+                              </div>
+
+                              <div className="text-right shrink-0">
+                                <span className="text-xs font-semibold px-2 py-1 bg-canvas-parchment border border-hairline rounded-full inline-flex items-center gap-1">
+                                  <MapPin size={10} className="text-primary" /> {s.operatingTheatre}
+                                </span>
+                                <span className="text-[10px] text-ink-muted-48 block mt-1.5">{s.time}</span>
+                              </div>
+                            </div>
+
+                            {/* Additional info for completed surgeries */}
+                            {isCompleted && (
+                              <div className="mt-3 pt-2.5 border-t border-hairline text-xs space-y-1.5">
+                                <div className="flex justify-between text-ink-muted-48 text-[11px]">
+                                  <span>Duration: <strong>{s.durationMinutes || 60} mins</strong></span>
+                                  <span>Completed: {s.completedAt ? new Date(s.completedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : s.time}</span>
+                                </div>
+                                {s.notes && (
+                                  <div className="bg-canvas-parchment/60 p-2.5 rounded-xl text-[11px] font-mono text-ink-muted-85 border border-hairline">
+                                    Notes: {s.notes}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+
+                            {/* Action buttons for upcoming surgeries */}
+                            {!isCompleted && (
+                              <div className="mt-3 pt-2.5 border-t border-hairline flex justify-end gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => setDoctorCancelModal({
+                                    open: true,
+                                    surgery: s,
+                                    reason: 'Patient hemodynamically unstable'
+                                  })}
+                                  className="px-3 py-1 text-xs font-semibold rounded-full bg-canvas-parchment hover:bg-rose-50 text-[#cf2d56] border border-hairline hover:border-rose-300 transition-all cursor-pointer inline-flex items-center gap-1"
+                                >
+                                  <XCircle size={12} />
+                                  <span>Cancel</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setDoctorCompleteModal({
+                                    open: true,
+                                    surgery: s,
+                                    outcome: 'Successful',
+                                    notes: '',
+                                    durationMinutes: 60
+                                  })}
+                                  className="px-3.5 py-1 text-xs font-semibold rounded-full bg-[#0066cc] hover:bg-[#0055b3] text-white shadow-sm transition-all cursor-pointer inline-flex items-center gap-1"
+                                >
+                                  <CheckCircle2 size={12} />
+                                  <span>Mark Completed</span>
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
+              );
+            })()}
           </div>
         )}
 
@@ -1406,6 +1588,153 @@ export default function DoctorDashboard() {
           )}
         </button>
       </footer>
+
+      {/* Doctor Complete Surgery Modal */}
+      {doctorCompleteModal.open && doctorCompleteModal.surgery && (
+        <div className="fixed inset-0 bg-black/60 z-[100] flex justify-center items-center p-4 backdrop-blur-sm">
+          <div className="bg-white border border-hairline p-5 max-w-sm w-full rounded-3xl shadow-2xl space-y-4">
+            <div className="flex justify-between items-start">
+              <div>
+                <div className="flex items-center gap-1.5">
+                  <CheckCircle2 size={16} className="text-emerald-600" />
+                  <h3 className="text-sm font-bold text-ink uppercase tracking-wider">Mark Surgery Complete</h3>
+                </div>
+                <p className="text-xs text-ink-muted-48 mt-0.5">{doctorCompleteModal.surgery.procedure}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDoctorCompleteModal({ open: false, surgery: null, outcome: 'Successful', notes: '', durationMinutes: 60 })}
+                className="text-ink-muted-48 hover:text-ink text-xs font-bold bg-canvas-parchment border border-hairline px-2 py-0.5 rounded-full cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleDoctorCompleteSurgery} className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-ink uppercase mb-1">Outcome</label>
+                <select
+                  value={doctorCompleteModal.outcome}
+                  onChange={e => setDoctorCompleteModal({ ...doctorCompleteModal, outcome: e.target.value })}
+                  className="w-full text-xs h-9 px-3 rounded-full border border-hairline bg-canvas"
+                  style={{ borderRadius: '20px' }}
+                >
+                  <option value="Successful">Successful</option>
+                  <option value="Successful with minor complications">Minor Complications</option>
+                  <option value="Transferred to ICU post-op">Transferred to ICU</option>
+                  <option value="Partial procedure completed">Partial Procedure</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-ink uppercase mb-1">Duration (Minutes)</label>
+                <input
+                  type="number"
+                  min="5"
+                  max="1440"
+                  value={doctorCompleteModal.durationMinutes}
+                  onChange={e => setDoctorCompleteModal({ ...doctorCompleteModal, durationMinutes: parseInt(e.target.value) || 60 })}
+                  className="w-full text-xs px-3 py-1.5 rounded-full border border-hairline bg-canvas"
+                  style={{ borderRadius: '20px' }}
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-ink uppercase mb-1">Operative Notes</label>
+                <textarea
+                  rows="2"
+                  value={doctorCompleteModal.notes}
+                  onChange={e => setDoctorCompleteModal({ ...doctorCompleteModal, notes: e.target.value })}
+                  placeholder="Intra-operative notes..."
+                  className="w-full text-xs p-2.5 rounded-xl border border-hairline bg-canvas font-mono"
+                  style={{ borderRadius: '12px' }}
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setDoctorCompleteModal({ open: false, surgery: null, outcome: 'Successful', notes: '', durationMinutes: 60 })}
+                  className="px-3.5 py-1.5 text-xs font-semibold rounded-full border border-hairline hover:bg-canvas-parchment cursor-pointer text-ink"
+                  style={{ borderRadius: '20px' }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submittingSurgAction}
+                  className="px-4 py-1.5 text-xs font-bold rounded-full bg-[#0066cc] hover:bg-[#0055b3] text-white shadow-sm cursor-pointer disabled:opacity-50"
+                  style={{ borderRadius: '20px' }}
+                >
+                  {submittingSurgAction ? 'Saving...' : 'Confirm Complete'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Doctor Cancel Surgery Modal */}
+      {doctorCancelModal.open && doctorCancelModal.surgery && (
+        <div className="fixed inset-0 bg-black/60 z-[100] flex justify-center items-center p-4 backdrop-blur-sm">
+          <div className="bg-white border border-hairline p-5 max-w-sm w-full rounded-3xl shadow-2xl space-y-4">
+            <div className="flex justify-between items-start">
+              <div>
+                <div className="flex items-center gap-1.5">
+                  <XCircle size={16} className="text-[#cf2d56]" />
+                  <h3 className="text-sm font-bold text-ink uppercase tracking-wider">Cancel Surgery</h3>
+                </div>
+                <p className="text-xs text-ink-muted-48 mt-0.5">{doctorCancelModal.surgery.procedure}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDoctorCancelModal({ open: false, surgery: null, reason: 'Patient hemodynamically unstable' })}
+                className="text-ink-muted-48 hover:text-ink text-xs font-bold bg-canvas-parchment border border-hairline px-2 py-0.5 rounded-full cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleDoctorCancelSurgery} className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-ink uppercase mb-1">Reason</label>
+                <select
+                  value={doctorCancelModal.reason}
+                  onChange={e => setDoctorCancelModal({ ...doctorCancelModal, reason: e.target.value })}
+                  className="w-full text-xs h-9 px-3 rounded-full border border-hairline bg-canvas"
+                  style={{ borderRadius: '20px' }}
+                >
+                  <option value="Patient hemodynamically unstable">Patient hemodynamically unstable</option>
+                  <option value="Emergency surgical rescheduling">Emergency rescheduling</option>
+                  <option value="Pre-op diagnostic anomaly">Pre-op diagnostic anomaly</option>
+                  <option value="Patient / Family requested postponement">Patient requested postponement</option>
+                  <option value="Other clinical rationale">Other clinical rationale</option>
+                </select>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setDoctorCancelModal({ open: false, surgery: null, reason: 'Patient hemodynamically unstable' })}
+                  className="px-3.5 py-1.5 text-xs font-semibold rounded-full border border-hairline hover:bg-canvas-parchment cursor-pointer text-ink"
+                  style={{ borderRadius: '20px' }}
+                >
+                  Keep
+                </button>
+                <button
+                  type="submit"
+                  disabled={submittingSurgAction}
+                  className="px-4 py-1.5 text-xs font-bold rounded-full bg-[#cf2d56] hover:bg-[#b02245] text-white shadow-sm cursor-pointer disabled:opacity-50"
+                  style={{ borderRadius: '20px' }}
+                >
+                  {submittingSurgAction ? 'Cancelling...' : 'Confirm Cancel'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       <ServerConfigModal 
         isOpen={showServerModal} 
