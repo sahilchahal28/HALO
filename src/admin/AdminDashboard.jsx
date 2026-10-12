@@ -5,7 +5,7 @@ import {
   Building2, Users, Bed, Truck, Droplet, Package,
   UserPlus, Plus, Search, Calendar, ChevronRight, AlertTriangle,
   Activity, Pill, FlaskConical, Stethoscope, QrCode,
-  CheckCircle2, XCircle, Clock, FileText, MapPin, Filter, Check, X, FileCheck, Printer, History, ShieldAlert, Scissors
+  CheckCircle2, XCircle, Clock, FileText, MapPin, Filter, Check, X, FileCheck, Printer, History, ShieldAlert, Scissors, KeyRound
 } from 'lucide-react';
 import QRCode from 'qrcode';
 
@@ -1354,13 +1354,37 @@ export default function AdminDashboard() {
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-3 flex-shrink-0">
+                      <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
                         <span className="text-[10px] bg-canvas-parchment border border-hairline text-ink px-2.5 py-0.5 rounded-full font-bold">
                           {p.bloodGroup}
                         </span>
                         <span className="text-[11px] text-ink-muted-48 hidden md:inline">
                           {p.phone}
                         </span>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setConfirmModal({
+                              isOpen: true,
+                              title: 'Reset Patient Security PIN',
+                              message: `Reset security PIN to default (123456) for ${p.name} (${p.patientId})?`,
+                              onConfirm: async () => {
+                                try {
+                                  await api.post(`/patients/${p.patientId}/reset-pin`);
+                                  addToast(`Security PIN reset to 123456 for ${p.name}`, 'success');
+                                } catch (err) {
+                                  addToast(err.message || 'Failed to reset PIN', 'error');
+                                }
+                              }
+                            });
+                          }}
+                          className="text-[10px] bg-canvas-parchment hover:bg-canvas border border-hairline hover:border-primary text-ink hover:text-primary px-2.5 py-1 rounded-full cursor-pointer transition-all font-semibold flex items-center gap-1"
+                          title="Reset PIN to default (123456)"
+                        >
+                          <KeyRound size={11} className="text-primary" />
+                          <span className="hidden sm:inline">Reset PIN</span>
+                        </button>
                         <PatientDirectoryQR
                           patient={p}
                           onZoom={(url, pt) => {
@@ -1394,6 +1418,30 @@ export default function AdminDashboard() {
                       </div>
 
                       <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setConfirmModal({
+                              isOpen: true,
+                              title: 'Reset Patient Security PIN',
+                              message: `Reset security PIN to default (123456) for ${selectedPatient.name} (${selectedPatient.patientId})?`,
+                              onConfirm: async () => {
+                                try {
+                                  await api.post(`/patients/${selectedPatient.patientId}/reset-pin`);
+                                  addToast(`Security PIN reset to 123456 for ${selectedPatient.name}`, 'success');
+                                } catch (err) {
+                                  addToast(err.message || 'Failed to reset PIN', 'error');
+                                }
+                              }
+                            });
+                          }}
+                          className="flex items-center gap-1.5 bg-canvas-parchment hover:bg-canvas border border-hairline hover:border-primary text-ink px-3 py-2 rounded-full cursor-pointer transition-all font-bold text-xs"
+                          title="Reset PIN to default (123456)"
+                        >
+                          <KeyRound size={14} className="text-primary" />
+                          <span>Reset PIN (123456)</span>
+                        </button>
+
                         <button
                           type="button"
                           onClick={async () => {
@@ -2187,7 +2235,30 @@ export default function AdminDashboard() {
                                   {d.status}
                                 </span>
                               </td>
-                              <td className="py-4 text-right">
+                              <td className="py-4 text-right space-x-3">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setConfirmModal({
+                                      isOpen: true,
+                                      title: 'Reset Doctor Security PIN',
+                                      message: `Reset security PIN to default (123456) for Dr. ${d.name} (${d.doctorId || d.id})?`,
+                                      onConfirm: async () => {
+                                        try {
+                                          await api.post(`/doctors/${d.doctorId || d.id}/reset-pin`);
+                                          addToast(`Security PIN reset to 123456 for Dr. ${d.name}`, 'success');
+                                        } catch (err) {
+                                          addToast(err.message || 'Failed to reset PIN', 'error');
+                                        }
+                                      }
+                                    });
+                                  }}
+                                  className="text-[10px] text-primary hover:underline uppercase font-bold cursor-pointer inline-flex items-center gap-1"
+                                  title="Reset PIN to default 123456"
+                                >
+                                  <KeyRound size={11} />
+                                  <span>Reset PIN</span>
+                                </button>
                                 <button
                                   onClick={() => handleDeleteDoctor(d.doctorId)}
                                   className="text-[10px] text-[#cf2d56] hover:underline uppercase font-bold cursor-pointer"

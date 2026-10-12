@@ -12,6 +12,7 @@ router.put('/:patientId/assign-doctor', patientController.assignDoctor);
 router.post('/:patientId/admit', patientController.admitPatient);
 router.get('/:patientId/documents', patientController.getPatientDocuments);
 router.post('/:patientId/documents', patientController.addPatientDocument);
+router.post('/:patientId/reset-pin', patientController.resetPatientPin);
 router.delete('/:patientId', patientController.deletePatient);
 
 export default router;

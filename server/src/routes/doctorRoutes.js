@@ -1,4 +1,6 @@
 import express from 'express';
+import mongoose from 'mongoose';
+import bcrypt from 'bcryptjs';
 import Doctor from '../models/Doctor.js';
 import { generateDoctorId } from '../utils/doctorIdGenerator.js';
 import { logAction } from '../services/auditService.js';
@@ -32,7 +34,9 @@ router.post('/', async (req, res, next) => {
       specialty: req.body.specialty || 'General Practice',
       department: req.body.department || 'GENERAL',
       phone: req.body.phone,
-      status: req.body.status || 'ACTIVE'
+      status: req.body.status || 'ACTIVE',
+      pin: bcrypt.hashSync('123456', 10),
+      pinUpdatedAt: new Date()
     });
 
     await newDoc.save();
@@ -48,6 +52,38 @@ router.post('/', async (req, res, next) => {
     res.status(201).json({
       ...newDoc.toObject(),
       id: newDoc.doctorId
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/:doctorId/reset-pin', async (req, res, next) => {
+  try {
+    const { doctorId } = req.params;
+    const doctor = await Doctor.findOne({
+      $or: [
+        { doctorId },
+        { _id: mongoose.isValidObjectId(doctorId) ? doctorId : null }
+      ]
+    });
+    if (!doctor) return res.status(404).json({ message: 'Doctor not found.' });
+
+    doctor.pin = bcrypt.hashSync('123456', 10);
+    doctor.pinUpdatedAt = new Date();
+    await doctor.save();
+
+    await logAction({
+      actor: req.user?.name || 'admin',
+      action: `Security PIN reset to default for Dr. ${doctor.name}`,
+      entityType: 'Doctor',
+      entityId: doctor.doctorId
+    });
+
+    res.json({
+      success: true,
+      message: `Security PIN reset to default (123456) for Dr. ${doctor.name}`,
+      doctorId: doctor.doctorId
     });
   } catch (err) {
     next(err);

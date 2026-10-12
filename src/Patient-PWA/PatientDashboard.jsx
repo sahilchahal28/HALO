@@ -7,7 +7,8 @@ import MyDocumentsPanel from './components/MyDocumentsPanel';
 import { 
   User, Calendar, CreditCard, ChevronRight, Activity, 
   MapPin, ShieldAlert, Phone, Ambulance, MessageSquare, Info,
-  Check, Receipt, Smartphone, Download, Trash2, FileText, AlertCircle, UploadCloud, Server
+  Check, Receipt, Smartphone, Download, Trash2, FileText, AlertCircle, UploadCloud, Server,
+  KeyRound, Eye, EyeOff, Lock, X
 } from 'lucide-react';
 
 export default function PatientDashboard() {
@@ -25,26 +26,71 @@ export default function PatientDashboard() {
   };
   const [qrBlob, setQrBlob] = useState('');
 
-  // Local state for credentials login form
-  const [loginForm, setLoginForm] = useState({ phone: '', id: '' });
+  // Local state for credentials login form & PIN management
+  const [loginForm, setLoginForm] = useState({ phone: '', id: '', pin: '' });
+  const [showPin, setShowPin] = useState(false);
+  const [showForgotPinModal, setShowForgotPinModal] = useState(false);
+  const [showChangePinModal, setShowChangePinModal] = useState(false);
+  const [changePinForm, setChangePinForm] = useState({ currentPin: '', newPin: '', confirmPin: '' });
+  const [showChangePinCurrent, setShowChangePinCurrent] = useState(false);
+  const [showChangePinNew, setShowChangePinNew] = useState(false);
+  const [changingPin, setChangingPin] = useState(false);
   const [loggingIn, setLoggingIn] = useState(false);
 
   const handleLoginSubmit = async (e) => {
     e.preventDefault();
     const rawPhone = (loginForm.phone || '').trim();
     const rawId = (loginForm.id || '').trim().replace(/[\s.]+/g, '-').replace(/-+/g, '-').toUpperCase();
-    if (!rawPhone || !rawId) return;
+    const rawPin = (loginForm.pin || '').trim();
+    if (!rawPhone || !rawId) {
+      addToast('Please enter both mobile number and Patient ID', 'error');
+      return;
+    }
+    if (!rawPin) {
+      addToast('Please enter your 6-digit security PIN', 'error');
+      return;
+    }
     setLoggingIn(true);
     try {
       const digitsOnly = rawPhone.replace(/\D/g, '');
       const phoneFormatted = rawPhone.startsWith('+')
         ? `+${digitsOnly}`
         : (digitsOnly.length === 10 ? `+91${digitsOnly}` : (digitsOnly.startsWith('91') ? `+${digitsOnly}` : `+91${digitsOnly}`));
-      await login('PATIENT', { phone: phoneFormatted, id: rawId });
+      await login('PATIENT', { phone: phoneFormatted, id: rawId, pin: rawPin });
     } catch (_) {
       // Error is already toasted by AppContext
     } finally {
       setLoggingIn(false);
+    }
+  };
+
+  const handleChangePinSubmit = async (e) => {
+    e.preventDefault();
+    if (!changePinForm.currentPin || !changePinForm.newPin) {
+      addToast('Please fill in current and new PIN', 'error');
+      return;
+    }
+    if (changePinForm.newPin.length < 4 || changePinForm.newPin.length > 6) {
+      addToast('New PIN must be 4 to 6 numeric digits', 'error');
+      return;
+    }
+    if (changePinForm.newPin !== changePinForm.confirmPin) {
+      addToast('New PIN and confirmation do not match', 'error');
+      return;
+    }
+    setChangingPin(true);
+    try {
+      const res = await api.post('/auth/change-pin', {
+        currentPin: changePinForm.currentPin,
+        newPin: changePinForm.newPin
+      });
+      addToast(res.message || 'Security PIN changed successfully', 'success');
+      setShowChangePinModal(false);
+      setChangePinForm({ currentPin: '', newPin: '', confirmPin: '' });
+    } catch (err) {
+      addToast(err.response?.data?.message || err.message || 'Failed to update PIN', 'error');
+    } finally {
+      setChangingPin(false);
     }
   };
 
@@ -259,12 +305,13 @@ export default function PatientDashboard() {
               <Activity size={28} />
             </div>
             <h2 className="text-xl font-bold text-ink">Patient Health Portal</h2>
-            <p className="text-xs text-ink-muted-48">Sign in with your registered mobile number & unique Patient ID.</p>
+            <p className="text-xs text-ink-muted-48">Sign in with your registered mobile, Patient ID & security PIN.</p>
           </div>
 
           <form onSubmit={handleLoginSubmit} className="space-y-4">
+            {/* 1. Enter No */}
             <div className="space-y-1">
-              <label className="text-[10px] text-ink-muted-48 uppercase font-bold tracking-widest block">Registered Mobile</label>
+              <label className="text-[10px] text-ink-muted-48 uppercase font-bold tracking-widest block">Enter No</label>
               <div className="flex items-center bg-canvas-parchment border border-hairline focus-within:border-hairline-strong transition-all overflow-hidden" style={{ borderRadius: '30px' }}>
                 <div className="bg-canvas-card border-r border-hairline px-3.5 py-3 text-xs text-ink-muted-48 font-bold flex items-center shrink-0">
                   +91
@@ -280,8 +327,9 @@ export default function PatientDashboard() {
               </div>
             </div>
 
+            {/* 2. Enter HALO ID */}
             <div className="space-y-1">
-              <label className="text-[10px] text-ink-muted-48 uppercase font-bold tracking-widest block">Unique Patient ID</label>
+              <label className="text-[10px] text-ink-muted-48 uppercase font-bold tracking-widest block">Enter HALO ID</label>
               <input 
                 type="text" 
                 placeholder="HALO-PAT-XX-XXXX" 
@@ -313,6 +361,47 @@ export default function PatientDashboard() {
               />
             </div>
 
+            {/* 3. Enter PIN */}
+            <div className="space-y-1">
+              <label className="text-[10px] text-ink-muted-48 uppercase font-bold tracking-widest block">Enter PIN</label>
+              <div className="relative flex items-center">
+                <input 
+                  type={showPin ? "text" : "password"} 
+                  placeholder="••••••" 
+                  value={loginForm.pin}
+                  maxLength={6}
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  onChange={e => {
+                    const clean = e.target.value.replace(/\D/g, '').slice(0, 6);
+                    setLoginForm(prev => ({ ...prev, pin: clean }));
+                  }}
+                  className="w-full pl-4 pr-11 py-3 text-xs bg-canvas-parchment border border-hairline focus:border-hairline-strong rounded-full focus:outline-none transition-all shadow-none font-mono tracking-widest"
+                  style={{ borderRadius: '30px' }}
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPin(!showPin)}
+                  className="absolute right-3.5 text-ink-muted-48 hover:text-ink cursor-pointer p-1 transition-colors"
+                  tabIndex={-1}
+                >
+                  {showPin ? <EyeOff size={15} /> : <Eye size={15} />}
+                </button>
+              </div>
+            </div>
+
+            {/* 4. (forgot password) */}
+            <div className="flex justify-end pt-0.5">
+              <button
+                type="button"
+                onClick={() => setShowForgotPinModal(true)}
+                className="text-xs text-primary hover:underline cursor-pointer transition-colors font-medium"
+              >
+                (forgot password)
+              </button>
+            </div>
+
             <button
               type="submit"
               disabled={loggingIn}
@@ -331,9 +420,38 @@ export default function PatientDashboard() {
             >
               <Server size={12} /> Configure Server Host IP
             </button>
-            <span className="text-[9px] text-ink-muted-48 uppercase tracking-wider block font-sans">SECURE PATIENT GATEWAY • ENCRYPTED</span>
+            <span className="text-[9px] text-ink-muted-48 uppercase tracking-wider block font-sans">SECURE PIN AUTHENTICATION • PATIENT GATEWAY</span>
           </div>
         </div>
+
+        {/* Forgot PIN Modal */}
+        {showForgotPinModal && (
+          <div className="fixed inset-0 bg-ink/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="bg-canvas border border-hairline w-full max-w-sm rounded-[24px] p-6 shadow-2xl relative text-center space-y-4">
+              <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center mx-auto text-primary">
+                <KeyRound size={24} />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-ink">Reset Your PIN</h3>
+                <p className="text-xs text-ink-muted-48 mt-2 leading-relaxed">
+                  Contact admin in case you are looking to reset your pin.
+                </p>
+                <div className="mt-3 text-[11px] text-ink-muted-48 bg-canvas-parchment p-3 rounded-2xl border border-hairline text-left leading-relaxed">
+                  Hospital administration can reset your security PIN to the default (<strong className="text-ink font-mono">123456</strong>) with one click from the Patients Directory.
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowForgotPinModal(false)}
+                className="w-full bg-primary hover:bg-primary-focus text-canvas text-xs font-semibold py-3 rounded-full uppercase tracking-wider transition-colors cursor-pointer"
+                style={{ borderRadius: '30px' }}
+              >
+                Understood
+              </button>
+            </div>
+          </div>
+        )}
+
         <ServerConfigModal 
           isOpen={showServerModal} 
           onClose={() => setShowServerModal(false)} 
@@ -355,7 +473,7 @@ export default function PatientDashboard() {
           <span className="text-ink text-sm font-semibold tracking-tight uppercase">HALO Care</span>
         </div>
         
-        {/* Language select dropdown & Server Settings & Exit */}
+        {/* Language select dropdown & Server Settings & PIN & Exit */}
         <div className="flex items-center gap-2">
           <button
             type="button"
@@ -364,6 +482,14 @@ export default function PatientDashboard() {
             title="Configure Server Host"
           >
             <Server size={15} />
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowChangePinModal(true)}
+            className="p-1.5 rounded-full text-ink-muted-48 hover:text-primary hover:bg-canvas-parchment cursor-pointer transition-colors"
+            title="Change Security PIN"
+          >
+            <KeyRound size={15} />
           </button>
           <select 
             value={language} 
@@ -1169,6 +1295,120 @@ export default function PatientDashboard() {
           <span className="mt-1 text-[9px] uppercase tracking-wider font-semibold">Emergency</span>
         </button>
       </footer>
+
+      {/* Self-Service Change PIN Modal */}
+      {showChangePinModal && (
+        <div className="fixed inset-0 bg-ink/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-canvas border border-hairline w-full max-w-sm rounded-[24px] p-6 shadow-2xl relative space-y-4">
+            <div className="flex items-center justify-between pb-2 border-b border-hairline">
+              <div className="flex items-center gap-2">
+                <KeyRound size={18} className="text-primary" />
+                <h3 className="text-sm font-bold text-ink">Change Security PIN</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowChangePinModal(false);
+                  setChangePinForm({ currentPin: '', newPin: '', confirmPin: '' });
+                }}
+                className="text-ink-muted-48 hover:text-ink cursor-pointer p-1"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <form onSubmit={handleChangePinSubmit} className="space-y-3">
+              <div>
+                <label className="text-[10px] text-ink-muted-48 uppercase font-bold tracking-widest block mb-1">Current PIN</label>
+                <div className="relative flex items-center">
+                  <input
+                    type={showChangePinCurrent ? "text" : "password"}
+                    maxLength={6}
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    value={changePinForm.currentPin}
+                    onChange={e => setChangePinForm(p => ({ ...p, currentPin: e.target.value.replace(/\D/g, '').slice(0, 6) }))}
+                    placeholder="••••••"
+                    className="w-full pl-4 pr-10 py-2.5 text-xs bg-canvas-parchment border border-hairline rounded-full focus:outline-none font-mono tracking-widest"
+                    style={{ borderRadius: '25px' }}
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowChangePinCurrent(!showChangePinCurrent)}
+                    className="absolute right-3 text-ink-muted-48 hover:text-ink cursor-pointer"
+                  >
+                    {showChangePinCurrent ? <EyeOff size={14} /> : <Eye size={14} />}
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[10px] text-ink-muted-48 uppercase font-bold tracking-widest block mb-1">New PIN (4-6 digits)</label>
+                <div className="relative flex items-center">
+                  <input
+                    type={showChangePinNew ? "text" : "password"}
+                    maxLength={6}
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    value={changePinForm.newPin}
+                    onChange={e => setChangePinForm(p => ({ ...p, newPin: e.target.value.replace(/\D/g, '').slice(0, 6) }))}
+                    placeholder="••••••"
+                    className="w-full pl-4 pr-10 py-2.5 text-xs bg-canvas-parchment border border-hairline rounded-full focus:outline-none font-mono tracking-widest"
+                    style={{ borderRadius: '25px' }}
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowChangePinNew(!showChangePinNew)}
+                    className="absolute right-3 text-ink-muted-48 hover:text-ink cursor-pointer"
+                  >
+                    {showChangePinNew ? <EyeOff size={14} /> : <Eye size={14} />}
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[10px] text-ink-muted-48 uppercase font-bold tracking-widest block mb-1">Confirm New PIN</label>
+                <input
+                  type="password"
+                  maxLength={6}
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  value={changePinForm.confirmPin}
+                  onChange={e => setChangePinForm(p => ({ ...p, confirmPin: e.target.value.replace(/\D/g, '').slice(0, 6) }))}
+                  placeholder="••••••"
+                  className="w-full px-4 py-2.5 text-xs bg-canvas-parchment border border-hairline rounded-full focus:outline-none font-mono tracking-widest"
+                  style={{ borderRadius: '25px' }}
+                  required
+                />
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowChangePinModal(false);
+                    setChangePinForm({ currentPin: '', newPin: '', confirmPin: '' });
+                  }}
+                  className="w-1/2 py-2.5 text-xs font-semibold border border-hairline rounded-full hover:bg-canvas-parchment transition-colors cursor-pointer"
+                  style={{ borderRadius: '25px' }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={changingPin}
+                  className="w-1/2 py-2.5 text-xs font-semibold bg-primary hover:bg-primary-focus text-canvas rounded-full transition-colors cursor-pointer disabled:opacity-50"
+                  style={{ borderRadius: '25px' }}
+                >
+                  {changingPin ? 'Updating...' : 'Update PIN'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       <ServerConfigModal 
         isOpen={showServerModal} 

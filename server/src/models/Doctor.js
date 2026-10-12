@@ -6,7 +6,9 @@ const DoctorSchema = new mongoose.Schema({
   phone: { type: String },
   department: { type: String },
   specialty: { type: String },
-  status: { type: String, enum: ['ACTIVE', 'INACTIVE'], default: 'ACTIVE' }
+  status: { type: String, enum: ['ACTIVE', 'INACTIVE'], default: 'ACTIVE' },
+  pin: { type: String, default: null }, // Bcrypt hash of 6-digit PIN; null defaults to '123456'
+  pinUpdatedAt: { type: Date }
 }, { timestamps: true });
 
 export default mongoose.model('Doctor', DoctorSchema);

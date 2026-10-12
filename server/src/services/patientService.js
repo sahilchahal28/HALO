@@ -1,3 +1,4 @@
+import bcrypt from 'bcryptjs';
 import Patient from '../models/Patient.js';
 import Doctor from '../models/Doctor.js';
 import TreatmentEpisode from '../models/TreatmentEpisode.js';
@@ -52,7 +53,9 @@ export async function registerPatient(patientData, actor) {
     emergencyContact: patientData.emergencyContact,
     allergies,
     medicalHistory,
-    qrCodeToken
+    qrCodeToken,
+    pin: bcrypt.hashSync(patientData.pin ? String(patientData.pin).trim() : '123456', 10),
+    pinUpdatedAt: new Date()
   });
 
   await patient.save();
@@ -407,4 +410,27 @@ export async function deletePatient(patientId, actor) {
   });
 
   return { success: true, patientId };
+}
+
+export async function resetPatientPin(patientId, actor) {
+  const patient = await Patient.findOne({ patientId });
+  if (!patient) throw new Error('Patient not found');
+
+  patient.pin = bcrypt.hashSync('123456', 10);
+  patient.pinUpdatedAt = new Date();
+  await patient.save();
+
+  await logAction({
+    actor: actor || 'admin',
+    action: `Security PIN reset to default (123456) for patient ${patient.fullName}`,
+    entityType: 'Patient',
+    entityId: patientId,
+    metadata: { patientId, name: patient.fullName }
+  });
+
+  return { 
+    success: true, 
+    message: `Security PIN has been reset to default (123456) for ${patient.fullName}`,
+    patientId: patient.patientId
+  };
 }

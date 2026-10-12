@@ -294,7 +294,8 @@ export function AppProvider({ children }) {
       const res = await api.post('/auth/login', {
         role,
         phone: credentials.phone,
-        id: credentials.id
+        id: credentials.id,
+        pin: credentials.pin
       });
 
       // Remember this device's PWA role (used by the standalone boot redirect)

@@ -32,7 +32,9 @@ const PatientSchema = new mongoose.Schema({
   status: { type: String, enum: ['ACTIVE', 'INACTIVE', 'ADMITTED'], default: 'ACTIVE' },
   assignedDoctor: { type: mongoose.Schema.Types.ObjectId, ref: 'Doctor' },
   currentBed: { type: String },
-  qrCodeToken: { type: String, required: true, unique: true }
+  qrCodeToken: { type: String, required: true, unique: true },
+  pin: { type: String, default: null }, // Bcrypt hash of 6-digit PIN; null defaults to '123456'
+  pinUpdatedAt: { type: Date }
 }, { 
   timestamps: true,
   toJSON: { virtuals: true },

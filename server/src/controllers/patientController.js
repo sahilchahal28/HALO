@@ -118,3 +118,14 @@ export async function deletePatient(req, res, next) {
     next(err);
   }
 }
+
+export async function resetPatientPin(req, res, next) {
+  try {
+    const { patientId } = req.params;
+    const actor = req.user ? req.user.name || req.user.id : 'Admin';
+    const result = await patientService.resetPatientPin(patientId, actor);
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+}

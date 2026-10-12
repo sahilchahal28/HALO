@@ -1,4 +1,5 @@
 import express from 'express';
+import bcrypt from 'bcryptjs';
 import Doctor from '../models/Doctor.js';
 import Patient from '../models/Patient.js';
 import { signAccessToken, signRefreshToken, verifyToken } from '../middleware/authenticate.js';
@@ -37,7 +38,7 @@ function clearRefreshCookie(res) {
 }
 
 router.post('/login', async (req, res, next) => {
-  const { role, phone, id } = req.body;
+  const { role, phone, id, pin } = req.body;
 
   if (!role || !phone || !id) {
     return res.status(400).json({ message: 'Role, phone number, and unique ID are required.' });
@@ -46,6 +47,7 @@ router.post('/login', async (req, res, next) => {
   try {
     const cleanPhone = String(phone).trim();
     const cleanId = String(id).trim().toUpperCase();
+    const cleanPin = pin ? String(pin).trim() : '';
 
     let payload = null;
 
@@ -60,6 +62,10 @@ router.post('/login', async (req, res, next) => {
         return res.status(401).json({ message: 'Invalid admin credentials.' });
       }
     } else if (role === 'DOCTOR') {
+      if (!cleanPin) {
+        return res.status(400).json({ message: '6-digit Security PIN is required.' });
+      }
+
       const digits = cleanPhone.replace(/\D/g, '');
       const last10 = digits.slice(-10);
 
@@ -85,8 +91,20 @@ router.post('/login', async (req, res, next) => {
         return res.status(401).json({ message: 'Invalid credentials or doctor profile inactive.' });
       }
 
+      const isPinValid = doctor.pin 
+        ? bcrypt.compareSync(cleanPin, doctor.pin) 
+        : (cleanPin === '123456');
+
+      if (!isPinValid) {
+        return res.status(401).json({ message: 'Incorrect 6-digit Security PIN. (Default: 123456)' });
+      }
+
       payload = { sub: doctor.doctorId, role: 'DOCTOR', name: doctor.name };
     } else if (role === 'PATIENT') {
+      if (!cleanPin) {
+        return res.status(400).json({ message: '6-digit Security PIN is required.' });
+      }
+
       const digits = cleanPhone.replace(/\D/g, '');
       const last10 = digits.slice(-10);
 
@@ -112,6 +130,14 @@ router.post('/login', async (req, res, next) => {
         return res.status(401).json({ message: 'Invalid credentials or patient profile not found.' });
       }
 
+      const isPinValid = patient.pin 
+        ? bcrypt.compareSync(cleanPin, patient.pin) 
+        : (cleanPin === '123456');
+
+      if (!isPinValid) {
+        return res.status(401).json({ message: 'Incorrect 6-digit Security PIN. (Default: 123456)' });
+      }
+
       payload = { sub: patient.patientId, role: 'PATIENT', name: patient.fullName, patientId: patient.patientId };
     } else {
       return res.status(400).json({ message: 'Invalid role for credentials-based authentication.' });
@@ -128,6 +154,66 @@ router.post('/login', async (req, res, next) => {
         ...(payload.patientId && { patientId: payload.patientId })
       }
     });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Self-Service PIN Change for Doctor & Patient
+router.post('/change-pin', async (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
+  if (!token) {
+    return res.status(401).json({ message: 'Authentication required to update PIN.' });
+  }
+
+  const decoded = verifyToken(token);
+  if (!decoded || !decoded.sub) {
+    return res.status(401).json({ message: 'Invalid or expired session token.' });
+  }
+
+  const { currentPin, newPin } = req.body;
+  if (!currentPin || !newPin) {
+    return res.status(400).json({ message: 'Current PIN and new 6-digit PIN are required.' });
+  }
+
+  const cleanNewPin = String(newPin).trim();
+  const cleanCurrentPin = String(currentPin).trim();
+
+  if (!/^\d{4,6}$/.test(cleanNewPin)) {
+    return res.status(400).json({ message: 'New PIN must be 4 to 6 numeric digits.' });
+  }
+
+  try {
+    if (decoded.role === 'DOCTOR') {
+      const doctor = await Doctor.findOne({ doctorId: decoded.sub });
+      if (!doctor) return res.status(404).json({ message: 'Doctor profile not found.' });
+
+      const isCurrentValid = doctor.pin ? bcrypt.compareSync(cleanCurrentPin, doctor.pin) : (cleanCurrentPin === '123456');
+      if (!isCurrentValid) {
+        return res.status(400).json({ message: 'Current PIN is incorrect.' });
+      }
+
+      doctor.pin = bcrypt.hashSync(cleanNewPin, 10);
+      doctor.pinUpdatedAt = new Date();
+      await doctor.save();
+      return res.json({ message: 'Doctor security PIN changed successfully.' });
+    } else if (decoded.role === 'PATIENT') {
+      const patient = await Patient.findOne({ patientId: decoded.patientId || decoded.sub });
+      if (!patient) return res.status(404).json({ message: 'Patient profile not found.' });
+
+      const isCurrentValid = patient.pin ? bcrypt.compareSync(cleanCurrentPin, patient.pin) : (cleanCurrentPin === '123456');
+      if (!isCurrentValid) {
+        return res.status(400).json({ message: 'Current PIN is incorrect.' });
+      }
+
+      patient.pin = bcrypt.hashSync(cleanNewPin, 10);
+      patient.pinUpdatedAt = new Date();
+      await patient.save();
+      return res.json({ message: 'Patient security PIN changed successfully.' });
+    } else {
+      return res.status(400).json({ message: 'PIN change is only applicable for Doctor and Patient accounts.' });
+    }
   } catch (err) {
     next(err);
   }
