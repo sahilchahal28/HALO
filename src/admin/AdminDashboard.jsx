@@ -1539,15 +1539,38 @@ export default function AdminDashboard() {
 
                         {/* List Attached Documents */}
                         <div className="pt-4 border-t border-hairline space-y-2">
-                          <span className="block text-xs text-ink-muted-48 uppercase font-bold tracking-wide">Attached Files & Reports</span>
+                          <div className="flex justify-between items-center">
+                            <span className="block text-xs text-ink-muted-48 uppercase font-bold tracking-wide">Attached Files & Reports</span>
+                            <span className="text-[10px] text-ink-muted-48 italic">Patient deletion only</span>
+                          </div>
                           <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
                             {selectedPatientDocuments.map((doc, idx) => (
                               <div key={idx} className="bg-canvas border border-hairline p-2.5 rounded-[11px] flex justify-between items-center text-[11px]">
                                 <div>
                                   <div className="font-semibold text-ink">{doc.title}</div>
-                                  <div className="text-[9px] text-ink-muted-48 uppercase mt-0.5">{doc.type} • By {doc.uploadedBy}</div>
+                                  <div className="text-[9px] text-ink-muted-48 uppercase mt-0.5">
+                                    {doc.type} • By {doc.uploadedBy}
+                                    {doc.retentionPolicy?.autoDelete ? ' • (6-mo purge)' : ' • (Permanent)'}
+                                  </div>
                                 </div>
-                                <span className="text-[9px] text-ink-muted-48 font-mono">{safeLocaleDateString(doc.createdAt)}</span>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-[9px] text-ink-muted-48 font-mono">{safeLocaleDateString(doc.createdAt)}</span>
+                                  <button
+                                    type="button"
+                                    onClick={async () => {
+                                      try {
+                                        const docId = doc.documentId || doc.id;
+                                        const res = await api.get(`/documents/${docId}/download-url`);
+                                        if (res.downloadUrl) window.open(res.downloadUrl, '_blank');
+                                      } catch (err) {
+                                        addToast(err.message || 'Download error', 'error');
+                                      }
+                                    }}
+                                    className="text-[9px] bg-canvas-parchment border border-hairline px-2 py-0.5 rounded-full hover:bg-canvas text-ink cursor-pointer font-medium"
+                                  >
+                                    View
+                                  </button>
+                                </div>
                               </div>
                             ))}
                             {selectedPatientDocuments.length === 0 && (

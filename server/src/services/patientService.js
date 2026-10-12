@@ -212,7 +212,10 @@ export async function admitPatient({ patientId, department, doctorId, reason }, 
 }
 
 export async function getPatientDocuments(patientId) {
-  return await MedicalDocument.find({ patientId }).sort({ createdAt: -1 });
+  return await MedicalDocument.find({
+    patientId,
+    status: { $in: ['ACTIVE', 'ARCHIVED'] }
+  }).sort({ examinationDate: -1, createdAt: -1 });
 }
 
 export async function addPatientDocument(patientId, docData, actor) {
@@ -221,6 +224,26 @@ export async function addPatientDocument(patientId, docData, actor) {
 
   const count = await MedicalDocument.countDocuments();
   const documentId = `DOC-${10000 + count}`;
+  const s3Key = docData.s3Key || `records/${patientId}/${Date.now()}-${documentId.toLowerCase()}.pdf`;
+  const mimeType = docData.mimeType || 'application/pdf';
+  const fileSize = docData.fileSize || 1024;
+
+  const isRetentionEligible = ['LAB_REPORT', 'IMAGING', 'TEST_REPORT'].includes(docData.type);
+  const examDate = docData.examinationDate ? new Date(docData.examinationDate) : new Date();
+
+  const retentionPolicy = isRetentionEligible
+    ? {
+        policyType: 'SIX_MONTHS_AUTO_DELETE',
+        autoDelete: true,
+        retentionDays: 180,
+        expiresAt: new Date(examDate.getTime() + 180 * 24 * 60 * 60 * 1000),
+      }
+    : {
+        policyType: 'PERMANENT',
+        autoDelete: false,
+        retentionDays: 0,
+        expiresAt: null,
+      };
 
   const document = new MedicalDocument({
     documentId,
@@ -228,8 +251,18 @@ export async function addPatientDocument(patientId, docData, actor) {
     treatmentEpisodeId: docData.treatmentEpisodeId || null,
     type: docData.type,
     title: docData.title,
-    fileRef: docData.fileRef || 'placeholder_file_url',
-    uploadedBy: actor || 'admin'
+    mimeType,
+    fileSize,
+    s3Key,
+    fileRef: s3Key,
+    department: docData.department || 'GENERAL',
+    doctor: docData.doctor || null,
+    doctorId: docData.doctorId || null,
+    examinationDate: examDate,
+    status: 'ACTIVE',
+    retentionPolicy,
+    uploadedBy: actor || 'admin',
+    uploadedByRole: 'ADMIN',
   });
 
   await document.save();
@@ -239,7 +272,7 @@ export async function addPatientDocument(patientId, docData, actor) {
     action: 'Document Uploaded',
     entityType: 'Patient',
     entityId: patientId,
-    metadata: { title: docData.title, type: docData.type, documentId }
+    metadata: { title: docData.title, type: docData.type, documentId, s3Key }
   });
 
   return document;

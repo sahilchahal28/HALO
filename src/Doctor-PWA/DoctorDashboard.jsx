@@ -101,9 +101,9 @@ export default function DoctorDashboard() {
 
   const [selectedPatient, setSelectedPatient] = useState(null);
   const [activeEpisode, setActiveEpisode] = useState(null);
-  const [aiSummary, setAiSummary] = useState('');
-  const [generatingAi, setGeneratingAi] = useState(false);
   const [showDigitizer, setShowDigitizer] = useState(false);
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [downloadingDocId, setDownloadingDocId] = useState(null);
 
   // New consultation details
   const [consForm, setConsForm] = useState({ notes: '', diagnosis: '' });
@@ -161,7 +161,6 @@ export default function DoctorDashboard() {
         const eps = await api.get(`/episodes?patientId=${selectedPatient.patientId}`);
         const active = eps.find(e => e.status === 'ACTIVE');
         setActiveEpisode(active || null);
-        setAiSummary('');
 
         const logs = await api.get(`/dashboard/audit?patientId=${selectedPatient.patientId}`);
         setTimelineLogs(logs || []);
@@ -311,21 +310,6 @@ export default function DoctorDashboard() {
       refreshData();
     } catch (err) {
       addToast(err.message, 'error');
-    }
-  };
-
-  const handleRequestAiSummary = async () => {
-    if (!selectedPatient) return;
-    setGeneratingAi(true);
-    setAiSummary('');
-    try {
-      const res = await api.post('/ai/summary', { patientId: selectedPatient.patientId });
-      setAiSummary(res.summary);
-      addToast('HALO-AI clinical history summary generated.', 'success');
-    } catch (err) {
-      addToast(err.message, 'error');
-    } finally {
-      setGeneratingAi(false);
     }
   };
 
@@ -772,35 +756,6 @@ export default function DoctorDashboard() {
               </button>
             </div>
 
-            {/* AI Summary card block */}
-            <div 
-              className="bg-canvas border border-hairline p-5 space-y-4"
-              style={{ borderRadius: '18px' }}
-            >
-              <div className="flex justify-between items-center border-b border-hairline pb-3">
-                <h3 className="text-xs text-ink font-semibold uppercase flex items-center gap-1.5">
-                  <Sparkles size={14} className="text-primary" /> HALO-AI Clinical Summary
-                </h3>
-                <button
-                  onClick={handleRequestAiSummary}
-                  disabled={generatingAi}
-                  className="text-xs bg-primary text-canvas px-3.5 py-1.5 rounded-full hover:bg-primary-focus disabled:opacity-50 uppercase flex items-center gap-1 cursor-pointer font-semibold"
-                >
-                  {generatingAi ? 'Analyzing...' : 'Generate AI Summary'}
-                </button>
-              </div>
-
-              {aiSummary ? (
-                <div className="bg-canvas-parchment border border-hairline rounded-[11px] p-4 text-xs text-ink leading-relaxed whitespace-pre-line font-mono">
-                  {aiSummary}
-                </div>
-              ) : (
-                <p className="text-xs text-ink-muted-80 leading-relaxed">
-                  Request an AI-generated concise summary of this patient's medical history, allergies, latest Troponin test measurements, and active diagnoses.
-                </p>
-              )}
-            </div>
-
             {/* Direct attention line toggler */}
             {selectedPatient && (
               <div 
@@ -1074,25 +1029,85 @@ export default function DoctorDashboard() {
 
                 {/* Medical Documents Section */}
                 <div 
-                  className="bg-canvas border border-hairline p-5"
+                  className="bg-canvas border border-hairline p-5 space-y-4"
                   style={{ borderRadius: '18px' }}
                 >
-                  <h3 className="text-xs text-ink-muted-48 tracking-widest uppercase border-b border-hairline pb-3 mb-4 font-semibold">
-                    Attached Files & Reports
-                  </h3>
+                  <div className="border-b border-hairline pb-3">
+                    <h3 className="text-xs text-ink-muted-48 tracking-widest uppercase font-semibold">
+                      Attached Records & Diagnostic Reports
+                    </h3>
+                    {/* Retention Policy & Privacy Notice */}
+                    <div className="mt-2.5 p-3 rounded-[11px] bg-canvas-parchment border border-hairline text-[11px] text-ink-muted-80 leading-relaxed flex items-start gap-2">
+                      <AlertCircle size={15} className="text-primary shrink-0 mt-0.5" />
+                      <div>
+                        <strong className="text-ink font-semibold">Retention Policy Notice:</strong> Diagnostic reports and test results older than 6 months are automatically purged in accordance with hospital compliance (unless under active legal hold). Prescriptions are preserved permanently.
+                        <div className="mt-1 text-[10px] text-ink-muted-48 italic">
+                          🔒 Patient Privacy: Medical records can only be removed or deleted by the patient.
+                        </div>
+                      </div>
+                    </div>
+                  </div>
 
-                  <div className="space-y-2 mb-4 max-h-40 overflow-y-auto pr-1">
+                  <div className="space-y-2 mb-4 max-h-52 overflow-y-auto pr-1">
                     {patientDocuments.map((doc, i) => (
                       <div key={i} className="flex justify-between items-center bg-canvas-parchment border border-hairline rounded-[11px] p-3 text-xs">
-                        <div>
-                          <div className="font-semibold text-ink">{doc.title}</div>
-                          <div className="text-[10px] text-ink-muted-48 uppercase mt-0.5">{doc.type} • By {doc.uploadedBy}</div>
+                        <div className="space-y-1">
+                          <div className="font-semibold text-ink flex items-center gap-1.5">
+                            <FileText size={13} className="text-primary" />
+                            {doc.title}
+                          </div>
+                          <div className="text-[10px] text-ink-muted-48 uppercase">
+                            {doc.type} • By {doc.uploadedBy || 'Medical Staff'}
+                            {doc.fileSize ? ` • ${(doc.fileSize / 1024).toFixed(0)} KB` : ''}
+                          </div>
+                          <div className="flex items-center gap-1.5 pt-0.5">
+                            {doc.retentionPolicy?.autoDelete ? (
+                              <span className="text-[9px] px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 font-medium border border-amber-500/20">
+                                6-Mo Auto Purge
+                              </span>
+                            ) : (
+                              <span className="text-[9px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 font-medium border border-emerald-500/20">
+                                Permanent Record
+                              </span>
+                            )}
+                            {doc.legalHold && (
+                              <span className="text-[9px] px-2 py-0.5 rounded-full bg-red-500/10 text-red-600 font-medium border border-red-500/20">
+                                ⚖️ Legal Hold
+                              </span>
+                            )}
+                          </div>
                         </div>
-                        <span className="text-[9px] text-ink-muted-48 font-mono">{new Date(doc.createdAt).toLocaleDateString()}</span>
+
+                        <div className="flex flex-col items-end gap-1.5">
+                          <span className="text-[9px] text-ink-muted-48 font-mono">{new Date(doc.createdAt).toLocaleDateString()}</span>
+                          <button
+                            type="button"
+                            disabled={downloadingDocId === doc.documentId}
+                            onClick={async () => {
+                              try {
+                                setDownloadingDocId(doc.documentId);
+                                const res = await api.get(`/documents/${doc.documentId}/download-url`);
+                                if (res.downloadUrl) {
+                                  window.open(res.downloadUrl, '_blank');
+                                } else {
+                                  addToast('Download link generated', 'info');
+                                }
+                              } catch (err) {
+                                addToast(err.message || 'Failed to download document', 'error');
+                              } finally {
+                                setDownloadingDocId(null);
+                              }
+                            }}
+                            className="text-[10px] bg-canvas border border-hairline hover:bg-canvas-parchment text-ink px-2.5 py-1 rounded-full flex items-center gap-1 cursor-pointer font-medium"
+                          >
+                            <Download size={11} />
+                            {downloadingDocId === doc.documentId ? 'Opening...' : 'View/Download'}
+                          </button>
+                        </div>
                       </div>
                     ))}
                     {patientDocuments.length === 0 && (
-                      <p className="text-xs text-ink-muted-48 italic py-2">No files or reports attached to this file.</p>
+                      <p className="text-xs text-ink-muted-48 italic py-3 text-center">No reports or records attached yet.</p>
                     )}
                   </div>
 
@@ -1102,14 +1117,43 @@ export default function DoctorDashboard() {
                       if (!docForm.title.trim()) return;
                       setUploadingDoc(true);
                       try {
-                        await api.post(`/patients/${selectedPatient.patientId}/documents`, {
-                          title: docForm.title,
-                          type: docForm.type,
-                          treatmentEpisodeId: activeEpisode.episodeId,
-                          fileRef: 'ref_doc_' + docForm.title.toLowerCase().replace(/\s+/g, '_')
-                        });
+                        if (selectedFile) {
+                          // 1. Request presigned upload URL
+                          const intentRes = await api.post('/documents/upload-intent', {
+                            patientId: selectedPatient.patientId,
+                            treatmentEpisodeId: activeEpisode?.episodeId,
+                            type: docForm.type,
+                            title: docForm.title,
+                            mimeType: selectedFile.type,
+                            fileSize: selectedFile.size,
+                            department: selectedPatient.department || 'GENERAL',
+                            doctor: user?.name,
+                          });
+
+                          // 2. Direct upload to S3 / R2
+                          if (intentRes.uploadUrl) {
+                            await fetch(intentRes.uploadUrl, {
+                              method: 'PUT',
+                              headers: { 'Content-Type': selectedFile.type },
+                              body: selectedFile,
+                            });
+                          }
+
+                          // 3. Confirm upload
+                          await api.post(`/documents/${intentRes.document.documentId}/confirm`);
+                        } else {
+                          // Metadata-only fallback
+                          await api.post(`/patients/${selectedPatient.patientId}/documents`, {
+                            title: docForm.title,
+                            type: docForm.type,
+                            treatmentEpisodeId: activeEpisode?.episodeId,
+                            fileRef: 'ref_doc_' + docForm.title.toLowerCase().replace(/\s+/g, '_')
+                          });
+                        }
+
                         setDocForm({ title: '', type: 'LAB_REPORT' });
-                        addToast('Document attached to patient record!', 'success');
+                        setSelectedFile(null);
+                        addToast('Document successfully secured in S3 storage!', 'success');
                         
                         // Reload docs
                         const docs = await api.get(`/patients/${selectedPatient.patientId}/documents`);
@@ -1123,31 +1167,56 @@ export default function DoctorDashboard() {
                     }}
                     className="border-t border-hairline pt-4 space-y-3"
                   >
-                    <span className="text-[11px] text-ink block font-semibold uppercase">Attach Report/File</span>
-                    <div className="flex gap-2">
+                    <span className="text-[11px] text-ink block font-semibold uppercase">Attach New Record to Private S3</span>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                       <input 
-                        type="text" placeholder="Title (e.g. ECG Scan)" required
+                        type="text" placeholder="Title (e.g. Chest X-Ray Scan)" required
                         value={docForm.title} onChange={e => setDocForm({ ...docForm, title: e.target.value })}
-                        className="flex-grow text-xs rounded-full bg-canvas-parchment"
+                        className="text-xs rounded-full bg-canvas-parchment px-3 py-1.5 border border-hairline"
                       />
                       <select
                         value={docForm.type} onChange={e => setDocForm({ ...docForm, type: e.target.value })}
                         className="text-xs bg-canvas border border-hairline rounded-full px-3 py-1.5 outline-none cursor-pointer"
                         style={{ borderRadius: '20px' }}
                       >
-                        <option value="PRESCRIPTION">Prescription</option>
-                        <option value="LAB_REPORT">Lab Report</option>
-                        <option value="IMAGING">Imaging (MRI/X-Ray)</option>
-                        <option value="REFERRAL">Referral Letter</option>
-                        <option value="OTHER">Other File</option>
+                        <option value="LAB_REPORT">Lab Report (6-mo auto purge)</option>
+                        <option value="IMAGING">Imaging MRI/CT/X-Ray (6-mo auto purge)</option>
+                        <option value="TEST_REPORT">Diagnostic Test (6-mo auto purge)</option>
+                        <option value="PRESCRIPTION">Prescription (Permanent)</option>
+                        <option value="DISCHARGE_SUMMARY">Discharge Summary (Permanent)</option>
+                        <option value="REFERRAL">Referral Letter (Permanent)</option>
+                        <option value="OTHER">Other Clinical Record</option>
                       </select>
                     </div>
+
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="file"
+                        accept=".pdf,image/jpeg,image/png"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            if (file.size > 15 * 1024 * 1024) {
+                              addToast('File exceeds 15MB limit', 'error');
+                              e.target.value = '';
+                              return;
+                            }
+                            setSelectedFile(file);
+                            if (!docForm.title) {
+                              setDocForm(prev => ({ ...prev, title: file.name.replace(/\.[^/.]+$/, '') }));
+                            }
+                          }
+                        }}
+                        className="text-xs file:mr-2 file:py-1 file:px-3 file:rounded-full file:border-0 file:text-[11px] file:bg-primary file:text-canvas file:cursor-pointer text-ink-muted-48 cursor-pointer"
+                      />
+                    </div>
+
                     <button
                       type="submit" disabled={uploadingDoc}
                       className="w-full bg-ink hover:bg-ink-muted-80 text-canvas text-xs font-semibold py-2.5 rounded-full transition-colors uppercase cursor-pointer"
                       style={{ borderRadius: '20px' }}
                     >
-                      {uploadingDoc ? 'Saving...' : 'Upload & Link Document'}
+                      {uploadingDoc ? 'Encrypting & Storing in S3...' : 'Upload & Secure in S3'}
                     </button>
                   </form>
                 </div>
