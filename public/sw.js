@@ -1,5 +1,5 @@
-const CACHE_NAME = 'halo-cache-v7';
-const API_CACHE_NAME = 'halo-api-cache-v1';
+const CACHE_NAME = 'halo-cache-v8';
+const API_CACHE_NAME = 'halo-api-cache-v2';
 
 // Precache only the app shell. Hashed /assets/* files are content-hashed and
 // cached stale-while-revalidate on first use — no build-time injection needed.
