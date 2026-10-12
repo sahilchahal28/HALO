@@ -1,6 +1,6 @@
 import React, { createContext, useState, useEffect, useContext, useRef } from 'react';
 import { WifiOff } from 'lucide-react';
-import { api } from '../utils/api';
+import { api, SESSION_REJECTED } from '../utils/api';
 import { createSocket } from '../utils/socket';
 import { flushQueue } from '../utils/offlineQueue';
 import { translations } from '../utils/translations';
@@ -139,6 +139,9 @@ export function AppProvider({ children }) {
         try {
           localStorage.setItem('halo_token', adminToken);
           localStorage.setItem('halo_user', JSON.stringify(adminUser));
+          // Admin is always same-origin — remove any stale LAN server URL that
+          // would cause API calls to be routed to an unreachable LAN host.
+          localStorage.removeItem('halo_server_url');
         } catch (_) { }
         setLoading(false);
         return;
@@ -150,25 +153,35 @@ export function AppProvider({ children }) {
       // otherwise cause "doctor not found" errors on QR-scan assignment.
       try {
         const session = await api.refreshSession();
-        if (!cancelled && session && session.token) {
+        if (!cancelled && session && session !== SESSION_REJECTED && session.token) {
           setToken(session.token);
           setUser(session.user);
           try {
             localStorage.setItem('halo_token', session.token);
             localStorage.setItem('halo_user', JSON.stringify(session.user));
           } catch (_) { }
-        } else if (!cancelled) {
-          // Server explicitly rejected the session (invalid/expired/ghost)
+        } else if (!cancelled && session === SESSION_REJECTED) {
+          // Server explicitly rejected the session (invalid/expired/ghost) — log out
           try {
             localStorage.removeItem('halo_token');
             localStorage.removeItem('halo_user');
           } catch (_) { }
           setToken(null);
           setUser(null);
+        } else if (!cancelled) {
+          // null = network failure (offline or server unreachable) — keep cached session
+          try {
+            const savedToken = localStorage.getItem('halo_token');
+            const savedUser = localStorage.getItem('halo_user');
+            setToken(savedToken || null);
+            setUser(savedUser ? JSON.parse(savedUser) : null);
+          } catch (_) {
+            setToken(null);
+            setUser(null);
+          }
         }
       } catch (err) {
-        // NETWORK failure (offline) — keep the cached session so the
-        // installed PWA still opens with its last-known data.
+        // Unexpected error (e.g. JSON parse failure) — keep cached session
         if (!cancelled) {
           try {
             const savedToken = localStorage.getItem('halo_token');
@@ -209,6 +222,40 @@ export function AppProvider({ children }) {
       window.removeEventListener('offline', goOffline);
     };
   }, []);
+
+  // Proactive token refresh: silently refresh the access token every 90 minutes
+  // while the user is logged in. This prevents the 2h access token from expiring
+  // mid-session for PWAs that stay open without a page reload.
+  useEffect(() => {
+    if (!token || !user || user.role === 'ADMIN') return; // Admin uses mock token, no refresh needed
+    const REFRESH_INTERVAL = 90 * 60 * 1000; // 90 minutes
+    const refreshTimer = setInterval(async () => {
+      if (document.hidden || !navigator.onLine) return; // Skip if backgrounded or offline
+      try {
+        const session = await api.refreshSession();
+        if (session && session !== SESSION_REJECTED && session.token) {
+          setToken(session.token);
+          try {
+            localStorage.setItem('halo_token', session.token);
+            if (session.user) {
+              setUser(session.user);
+              localStorage.setItem('halo_user', JSON.stringify(session.user));
+            }
+          } catch (_) { }
+        } else if (session === SESSION_REJECTED) {
+          // Server says session is gone — log out
+          setToken(null);
+          setUser(null);
+          try {
+            localStorage.removeItem('halo_token');
+            localStorage.removeItem('halo_user');
+          } catch (_) { }
+          addToast('Your session has expired. Please sign in again.', 'error');
+        }
+      } catch (_) { /* network error — will retry next interval */ }
+    }, REFRESH_INTERVAL);
+    return () => clearInterval(refreshTimer);
+  }, [token, user?.role]);
 
   const login = async (role, credentials) => {
     setLoading(true);

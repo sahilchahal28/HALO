@@ -24,7 +24,9 @@ function setRefreshCookie(req, res, token) {
   res.cookie(REFRESH_COOKIE, token, {
     httpOnly: true,
     secure: isHttps,
-    sameSite: 'lax',
+    // 'none' is required for cross-origin PWA requests (e.g. Vercel → Railway).
+    // 'lax' blocks the cookie on cross-site POST requests, causing refresh failures.
+    sameSite: isHttps ? 'none' : 'lax',
     path: '/api/auth',
     maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
   });

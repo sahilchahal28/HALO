@@ -11,7 +11,7 @@ export function verifyToken(token) {
 }
 
 export function signAccessToken(payload) {
-  return jwt.sign(payload, JWT_SECRET, { expiresIn: '15m' });
+  return jwt.sign(payload, JWT_SECRET, { expiresIn: '2h' });
 }
 
 export function signRefreshToken(payload) {

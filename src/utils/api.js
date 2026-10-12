@@ -49,43 +49,10 @@ function sanitizeApiBase(raw) {
   return withScheme;
 }
 
-// Cache for auto-detected LAN base to avoid repeated probes
-let lanBaseCache = null;
-let lanBaseCacheTime = 0;
-const LAN_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
-
-// Synchronous getter for cached LAN base (used by getApiBase)
-function getCachedLanBase() {
-  if (lanBaseCache && Date.now() - lanBaseCacheTime < LAN_CACHE_TTL) {
-    return lanBaseCache;
-  }
-  return null;
-}
-
-// Background probe for LAN base — runs async, updates cache
-async function probeLanBase() {
-  if (typeof window === 'undefined') return;
-  // Only probe when on https (Vercel) - on http we're already direct
-  if (!isPageHttps()) return;
-  try {
-    const res = await fetch('/api/server-info', { credentials: 'same-origin' });
-    if (res.ok) {
-      const data = await res.json();
-      if (data.lanIp) {
-        const base = `http://${data.lanIp}:5001`;
-        lanBaseCache = base;
-        lanBaseCacheTime = Date.now();
-      }
-    }
-  } catch (_) {}
-}
-
-// Kick off background probe on module load
-if (typeof window !== 'undefined') {
-  probeLanBase();
-  // Re-probe periodically
-  setInterval(probeLanBase, LAN_CACHE_TTL);
-}
+// NOTE: Auto-detect LAN probe removed — it caused production/Vercel deployments
+// to route all API calls through an unreachable LAN IP from the server's
+// network interface. Users who need a custom LAN base should set it explicitly
+// via the Server Settings UI (stored as halo_server_url in localStorage).
 
 let refreshingPromise = null;
 
@@ -154,10 +121,6 @@ export function getApiBase() {
       }
     } catch (_) {}
 
-    // 3. Auto-detected LAN IP (cached) — allows direct Mac connection
-    //    when phone is on same Wi-Fi, bypassing the flaky tunnel.
-    const lanBase = getCachedLanBase();
-    if (lanBase) return lanBase;
   }
   // Same-origin fallback (dev vite proxy / production Express)
   return '';
@@ -182,6 +145,11 @@ export function clearServerUrl() {
   } catch (_) {}
 }
 
+// Sentinel returned by refreshSession when the server explicitly rejects the
+// session with a 401. Callers can distinguish this from a network failure
+// (which returns null) to decide whether to wipe the local session or keep it.
+export const SESSION_REJECTED = Symbol('SESSION_REJECTED');
+
 async function refreshSession() {
   if (!refreshingPromise) {
     refreshingPromise = (async () => {
@@ -204,8 +172,9 @@ async function refreshSession() {
             await new Promise(r => setTimeout(r, 800 * (attempt + 1)));
             continue;
           }
-          // 401 = session truly expired; don't retry
-          if (res.status === 401) return null;
+          // 401 = server explicitly rejected the session (expired/invalid/ghost)
+          // Return the sentinel so callers know to wipe the local session.
+          if (res.status === 401) return SESSION_REJECTED;
           lastError = new ApiError(`Refresh failed (${res.status})`, res.status);
         } catch (e) {
           // Network error on a custom base — the stored URL may be dead. Drop it
@@ -224,12 +193,15 @@ async function refreshSession() {
                   if (data2.token) setToken(data2.token);
                   return data2;
                 }
+                // Same-origin also gave 401 — session truly rejected
+                if (res2.status === 401) return SESSION_REJECTED;
               } catch (_) {}
             }
           }
           lastError = e instanceof ApiError ? e : new ApiError(e.message, undefined);
         }
       }
+      // null = network failure — caller should keep cached session
       return null;
     })().finally(() => {
       refreshingPromise = null;
@@ -329,7 +301,7 @@ async function rawRequest(endpoint, options = {}, isRetry = false) {
   if (response.status === 401 && !isRetry && !endpoint.startsWith('/auth/')) {
     // Access token expired → silent refresh once, then retry
     const session = await refreshSession();
-    if (session && session.token) {
+    if (session && session !== SESSION_REJECTED && session.token) {
       return rawRequest(endpoint, options, true);
     }
   }
@@ -385,5 +357,6 @@ export const api = {
   patch: (endpoint, body, headers = {}) => request(endpoint, { method: 'PATCH', body, headers }),
   delete: (endpoint, headers = {}) => request(endpoint, { method: 'DELETE', headers }),
   refreshSession,
+  SESSION_REJECTED,
   getFileUrl,
 };
