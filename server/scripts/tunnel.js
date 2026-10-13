@@ -192,7 +192,23 @@ async function main() {
   console.log('  Keep this terminal window open. Press Ctrl+C to stop.\n');
   console.log('  NOTE: only if the Public Tunnel Address above differs from the');
   console.log('  address in vercel.json should you append ?server=<tunnel-url> to');
-  console.log('  the Vercel links — otherwise login will fail.');
+  // Automatically sync vercel.json with the active tunnel URL
+  const syncVercelJson = async (url) => {
+    try {
+      const fs = await import('fs');
+      const vercelConfigPath = 'vercel.json';
+      if (fs.existsSync(vercelConfigPath)) {
+        const vercelConfig = JSON.parse(fs.readFileSync(vercelConfigPath, 'utf8'));
+        if (vercelConfig.rewrites && vercelConfig.rewrites[0]) {
+          vercelConfig.rewrites[0].destination = `${url}/api/:path*`;
+          fs.writeFileSync(vercelConfigPath, JSON.stringify(vercelConfig, null, 2) + '\n');
+          console.log(`[Tunnel] Synced vercel.json destination to: ${url}/api/:path*`);
+        }
+      }
+    } catch (_) {}
+  };
+
+  await syncVercelJson(publicUrl);
 
   // Auto-reconnect watchdog
   tunnel.on('close', async () => {
@@ -201,6 +217,7 @@ async function main() {
       try {
         tunnel = await startTunnel(DEFAULT_SUBDOMAIN);
         console.log(`[Tunnel] Reconnected at: ${tunnel.url}`);
+        await syncVercelJson(tunnel.url);
       } catch (e) {
         console.error('[Tunnel] Reconnect failed:', e.message);
       }
