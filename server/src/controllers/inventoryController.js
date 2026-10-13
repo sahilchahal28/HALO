@@ -9,6 +9,15 @@ export async function getInventory(req, res, next) {
   }
 }
 
+export async function getTransactions(req, res, next) {
+  try {
+    const list = await inventoryService.getTransactions();
+    res.json(list);
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function logMovement(req, res, next) {
   try {
     const actor = req.user ? req.user.id : 'admin';
