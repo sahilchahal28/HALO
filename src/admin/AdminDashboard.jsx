@@ -5,9 +5,11 @@ import {
   Building2, Users, Bed, Truck, Droplet, Package,
   UserPlus, Plus, Search, Calendar, ChevronRight, AlertTriangle,
   Activity, Pill, FlaskConical, Stethoscope, QrCode,
-  CheckCircle2, XCircle, Clock, FileText, MapPin, Filter, Check, X, FileCheck, Printer, History, ShieldAlert, Scissors, KeyRound
+  CheckCircle2, XCircle, Clock, FileText, MapPin, Filter, Check, X, FileCheck, Printer, History, ShieldAlert, Scissors, KeyRound,
+  LayoutDashboard
 } from 'lucide-react';
 import QRCode from 'qrcode';
+import PharmacyAnalyticsDashboardModal from './components/PharmacyAnalyticsDashboardModal';
 
 const getCategoryIcon = (category) => {
   const norm = (category || '').toUpperCase();
@@ -161,8 +163,9 @@ export default function AdminDashboard() {
   const [bloodReq, setBloodReq] = useState({ group: '', units: 1 });
   const [eligibleDonors, setEligibleDonors] = useState([]);
 
-  // Inventory movement State
+  // Inventory movement State & Analytics Dashboard Modal State
   const [invMove, setInvMove] = useState({ itemId: '', type: 'Received', qty: 1, notes: '' });
+  const [showPharmacyAnalytics, setShowPharmacyAnalytics] = useState(false);
 
   // Surgery Register & OT Management State
   const [surgForm, setSurgForm] = useState({ patientId: '', procedure: '', doctorId: '', theatre: 'OT-01', time: '' });
@@ -2725,7 +2728,21 @@ export default function AdminDashboard() {
                   className="lg:col-span-2 bg-canvas border border-hairline p-6"
                   style={{ borderRadius: '18px' }}
                 >
-                  <h3 className="text-xs text-ink-muted-48 tracking-widest uppercase mb-4 font-semibold">Stock Ledger List</h3>
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
+                    <div>
+                      <h3 className="text-xs text-ink-muted-48 tracking-widest uppercase font-semibold">Stock Ledger List</h3>
+                      <span className="text-[11px] text-ink-muted-48 block mt-0.5">Real-time pharmaceutical supplies and stock catalog</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowPharmacyAnalytics(true)}
+                      className="px-4 py-2 rounded-full bg-ink hover:bg-ink-muted-80 text-canvas text-xs font-semibold flex items-center gap-2 shadow-sm transition-all cursor-pointer shrink-0"
+                      style={{ borderRadius: '30px' }}
+                    >
+                      <LayoutDashboard size={14} className="text-primary" />
+                      <span>Pharmacy Operations Dashboard</span>
+                    </button>
+                  </div>
 
                   <div className="overflow-x-auto">
                     <table className="w-full text-left border-collapse text-xs">
@@ -4046,6 +4063,14 @@ export default function AdminDashboard() {
           </div>
         </div>
       )}
+
+      {/* Pharmacy Operations & Analytics Dashboard Modal */}
+      <PharmacyAnalyticsDashboardModal
+        isOpen={showPharmacyAnalytics}
+        onClose={() => setShowPharmacyAnalytics(false)}
+        inventory={inventory}
+        addToast={addToast}
+      />
     </div>
   );
 }

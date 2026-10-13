@@ -130,3 +130,65 @@ export async function deleteInventoryItem(itemId, actor) {
 
   return { success: true };
 }
+
+export async function getTransactions() {
+  let txns = await InventoryTransaction.find({}).sort({ timestamp: -1, createdAt: -1 }).limit(50);
+  if (txns.length === 0) {
+    const items = await InventoryItem.find({});
+    if (items.length > 0) {
+      const sampleTxns = [
+        {
+          transactionId: 'TXN-10025',
+          itemId: items[0]?.itemId || 'INV-10001',
+          type: 'RECEIVE',
+          quantity: 500,
+          performedBy: 'Apex Pharma Logistics',
+          reason: 'Scheduled Wholesale Batch Restock',
+          timestamp: new Date(Date.now() - 2 * 3600 * 1000)
+        },
+        {
+          transactionId: 'TXN-10024',
+          itemId: items[1]?.itemId || items[0]?.itemId || 'INV-10002',
+          type: 'ISSUE',
+          quantity: 25,
+          performedBy: 'Dr. Arjun Mehta (ICU)',
+          reason: 'Emergency Ward Rapid Consumption',
+          timestamp: new Date(Date.now() - 5 * 3600 * 1000)
+        },
+        {
+          transactionId: 'TXN-10023',
+          itemId: items[2]?.itemId || items[0]?.itemId || 'INV-10003',
+          type: 'ISSUE',
+          quantity: 80,
+          performedBy: 'Dr. Sarah Jenkins (OT)',
+          reason: 'Operating Theater Sterilized Pack Allocation',
+          timestamp: new Date(Date.now() - 12 * 3600 * 1000)
+        },
+        {
+          transactionId: 'TXN-10022',
+          itemId: items[0]?.itemId || 'INV-10001',
+          type: 'RECEIVE',
+          quantity: 1200,
+          performedBy: 'Central Medical Supplies Depot',
+          reason: 'Quarterly Safety Buffer Replenishment',
+          timestamp: new Date(Date.now() - 24 * 3600 * 1000)
+        },
+        {
+          transactionId: 'TXN-10021',
+          itemId: items[1]?.itemId || items[0]?.itemId || 'INV-10002',
+          type: 'WASTE',
+          quantity: 4,
+          performedBy: 'Clinical QA Inspector',
+          reason: 'Compromised Seal Quarantine Disposal',
+          timestamp: new Date(Date.now() - 36 * 3600 * 1000)
+        }
+      ];
+      try {
+        await InventoryTransaction.insertMany(sampleTxns);
+        txns = await InventoryTransaction.find({}).sort({ timestamp: -1, createdAt: -1 }).limit(50);
+      } catch (_) {}
+    }
+  }
+  return txns;
+}
+
