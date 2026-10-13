@@ -85,12 +85,17 @@ export default function DocumentCard({
             </span>
           ) : null}
 
-          {doc.hasCachedBlob && (
+          {doc.syncStatus === 'PENDING_SYNC' ? (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-700 font-medium border border-amber-500/20">
+              <Clock size={10} />
+              Pending Archive Sync
+            </span>
+          ) : doc.hasCachedBlob ? (
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-700 font-medium border border-emerald-500/20">
               <HardDrive size={10} />
               Stored on Device
             </span>
-          )}
+          ) : null}
         </div>
 
         <div className="flex items-center gap-1.5">

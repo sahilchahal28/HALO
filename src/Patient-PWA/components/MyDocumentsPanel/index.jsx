@@ -265,21 +265,41 @@ export default function MyDocumentsPanel({ user, patientEpisode }) {
       formData.append('department', 'GENERAL');
       formData.append('examinationDate', uploadForm.examinationDate);
 
-      const res = await api.post('/documents/upload', formData);
+      try {
+        const res = await api.post('/documents/upload', formData);
 
-      if (res && res.s3Key) {
+        if (res && res.s3Key) {
+          await ObjectStore.putObject({
+            key: res.s3Key,
+            blob: uploadFile,
+            metadata: {
+              ...res,
+              documentId: res.documentId,
+              patientId,
+              syncStatus: 'SYNCED',
+            },
+          });
+        }
+        addToast('Medical record archived and saved to device!', 'success');
+      } catch (uploadErr) {
+        console.warn('[MyDocumentsPanel] Server upload pending or offline, caching locally:', uploadErr.message);
+        // Fallback: save to local IndexedDB immediately so user never loses file or gets blocked!
+        const localKey = `records/${patientId}/local-${Date.now()}-${uploadFile.name || 'document'}`;
         await ObjectStore.putObject({
-          key: res.s3Key,
+          key: localKey,
           blob: uploadFile,
           metadata: {
-            ...res,
-            documentId: res.documentId,
+            title: uploadForm.title,
+            type: uploadForm.type,
+            department: 'GENERAL',
+            examinationDate: uploadForm.examinationDate,
             patientId,
+            syncStatus: 'PENDING_SYNC',
+            uploadedAt: new Date().toISOString(),
           },
         });
+        addToast('Saved locally on device! Will synchronize with archive when connected.', 'info');
       }
-
-      addToast('Medical record archived and saved to device!', 'success');
       setUploadForm({
         title: '',
         type: 'LAB_REPORT',

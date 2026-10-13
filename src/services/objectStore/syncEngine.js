@@ -240,6 +240,9 @@ export const HALOArchive = {
         }
       }
 
+      // Sync any documents that were saved locally while offline or during server downtime
+      await this.syncPendingUploads(patientId);
+
       // Run local 6-month retention purge
       await runLocalRetentionPurge(role);
 
@@ -254,6 +257,53 @@ export const HALOArchive = {
     } catch (err) {
       console.warn('[HALOArchive] Background sync delta error (will retry next cycle):', err.message);
       return [];
+    }
+  },
+
+  /**
+   * Sync documents that were cached locally while server was unreachable.
+   */
+  async syncPendingUploads(patientId) {
+    if (!patientId) return;
+    try {
+      const records = await ObjectStore.listObjects({ patientId, limit: 100 });
+      const pending = (records.items || []).filter(item => item.syncStatus === 'PENDING_SYNC');
+      for (const item of pending) {
+        const full = await ObjectStore.getObject(item.fileKey);
+        if (full && full.blob && full.blob.size > 0) {
+          const formData = new FormData();
+          formData.append('file', full.blob, item.title || 'document');
+          formData.append('patientId', patientId);
+          formData.append('type', item.type || 'LAB_REPORT');
+          formData.append('title', item.title || 'Medical Document');
+          formData.append('department', item.department || 'GENERAL');
+          formData.append('examinationDate', item.examinationDate || new Date().toISOString());
+          if (item.doctor) formData.append('doctor', item.doctor);
+          if (item.doctorId) formData.append('doctorId', item.doctorId);
+
+          try {
+            const res = await api.post('/documents/upload', formData);
+            if (res && res.s3Key) {
+              await ObjectStore.deleteObject(item.fileKey);
+              await ObjectStore.putObject({
+                key: res.s3Key,
+                blob: full.blob,
+                metadata: {
+                  ...res,
+                  documentId: res.documentId,
+                  patientId,
+                  syncStatus: 'SYNCED',
+                },
+              });
+              console.log(`[HALOArchive] Successfully synced pending upload: ${item.title} -> ${res.documentId}`);
+            }
+          } catch (uploadErr) {
+            console.warn('[HALOArchive] Pending upload will retry next sync cycle:', uploadErr.message);
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[HALOArchive] syncPendingUploads check error:', e.message);
     }
   },
 

@@ -284,22 +284,44 @@ export default function PatientDocumentsPanel({
       if (doctorUser?.doctorId) formData.append('doctorId', doctorUser.doctorId);
       else if (doctorUser?.id) formData.append('doctorId', doctorUser.id);
 
-      const res = await api.post('/documents/upload', formData);
+      try {
+        const res = await api.post('/documents/upload', formData);
 
-      // Cache directly into local IndexedDB
-      if (res && res.s3Key) {
+        // Cache directly into local IndexedDB
+        if (res && res.s3Key) {
+          await ObjectStore.putObject({
+            key: res.s3Key,
+            blob: uploadFile,
+            metadata: {
+              ...res,
+              documentId: res.documentId,
+              patientId,
+              syncStatus: 'SYNCED',
+            },
+          });
+        }
+        addToast('Medical record archived and synchronized to patient file!', 'success');
+      } catch (uploadErr) {
+        console.warn('[PatientDocumentsPanel] Server upload pending or offline, storing locally:', uploadErr.message);
+        const localKey = `records/${patientId}/local-${Date.now()}-${uploadFile.name || 'document'}`;
         await ObjectStore.putObject({
-          key: res.s3Key,
+          key: localKey,
           blob: uploadFile,
           metadata: {
-            ...res,
-            documentId: res.documentId,
+            title: uploadForm.title,
+            type: uploadForm.type,
+            department: uploadForm.department || 'GENERAL',
+            examinationDate: uploadForm.examinationDate,
+            doctor: doctorUser?.name,
+            doctorId: doctorUser?.doctorId || doctorUser?.id,
             patientId,
+            syncStatus: 'PENDING_SYNC',
+            uploadedAt: new Date().toISOString(),
           },
         });
+        addToast('Saved to device storage! Will synchronize with patient record when server is online.', 'info');
       }
 
-      addToast('Medical record archived and synchronized to patient file!', 'success');
       setUploadForm({
         title: '',
         type: 'LAB_REPORT',
@@ -310,7 +332,7 @@ export default function PatientDocumentsPanel({
       setShowUploadForm(false);
       await loadDocumentsFromStore();
     } catch (err) {
-      console.error('[PatientDocumentsPanel] Upload failed:', err);
+      console.error('[PatientDocumentsPanel] Upload error:', err);
       addToast(err.message || 'Failed to archive document', 'error');
     } finally {
       setIsUploading(false);
