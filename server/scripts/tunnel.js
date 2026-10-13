@@ -173,42 +173,22 @@ async function main() {
   // below — no ?server= override. Appending ?server=<tunnel-url> forces all
   // API calls cross-origin to the tunnel, which breaks login the moment the
   // tunnel restarts (no CORS on error pages) and persists in localStorage.
-  const doctorUrl = `${FRONTEND_HOST}/doctor`;
-  const patientUrl = `${FRONTEND_HOST}/patient`;
-  const adminUrl = `${FRONTEND_HOST}/admin`;
+  const doctorTunnelUrl = `${FRONTEND_HOST}/doctor?server=${encodeURIComponent(publicUrl)}`;
+  const patientTunnelUrl = `${FRONTEND_HOST}/patient?server=${encodeURIComponent(publicUrl)}`;
+  const adminTunnelUrl = `${FRONTEND_HOST}/admin?server=${encodeURIComponent(publicUrl)}`;
 
   console.log('\n================================================================');
-  console.log('  STATUS: ONLINE — TUNNEL READY (VERCEL PATH)');
+  console.log('  STATUS: ONLINE — TUNNEL READY');
   console.log('================================================================');
   console.log(`  • Local Server (This Mac):  http://127.0.0.1:${PORT}`);
   console.log(`  • Local Wi-Fi (LAN IP):     http://${lanIp}:${PORT}`);
   console.log(`  • Public Tunnel Address:    ${publicUrl}`);
   console.log(`  • Mac Storage Directory:    server/storage/users/records/`);
   console.log('----------------------------------------------------------------');
-  console.log(`  Direct (LAN): open http://${lanIp}:${PORT}/doctor | /patient | /admin`);
-  console.log(`  Vercel path:  ${doctorUrl} | ${patientUrl} | ${adminUrl}`);
-  console.log('                (PWA calls same-origin /api, rewritten to this Mac via vercel.json)');
+  console.log(`  Direct on Wi-Fi (LAN):      http://${lanIp}:${PORT}/doctor`);
+  console.log(`  Remote from anywhere:       ${doctorTunnelUrl}`);
   console.log('================================================================');
   console.log('  Keep this terminal window open. Press Ctrl+C to stop.\n');
-  console.log('  NOTE: only if the Public Tunnel Address above differs from the');
-  console.log('  address in vercel.json should you append ?server=<tunnel-url> to');
-  // Automatically sync vercel.json with the active tunnel URL
-  const syncVercelJson = async (url) => {
-    try {
-      const fs = await import('fs');
-      const vercelConfigPath = 'vercel.json';
-      if (fs.existsSync(vercelConfigPath)) {
-        const vercelConfig = JSON.parse(fs.readFileSync(vercelConfigPath, 'utf8'));
-        if (vercelConfig.rewrites && vercelConfig.rewrites[0]) {
-          vercelConfig.rewrites[0].destination = `${url}/api/:path*`;
-          fs.writeFileSync(vercelConfigPath, JSON.stringify(vercelConfig, null, 2) + '\n');
-          console.log(`[Tunnel] Synced vercel.json destination to: ${url}/api/:path*`);
-        }
-      }
-    } catch (_) {}
-  };
-
-  await syncVercelJson(publicUrl);
 
   // Auto-reconnect watchdog
   tunnel.on('close', async () => {
@@ -217,7 +197,7 @@ async function main() {
       try {
         tunnel = await startTunnel(DEFAULT_SUBDOMAIN);
         console.log(`[Tunnel] Reconnected at: ${tunnel.url}`);
-        await syncVercelJson(tunnel.url);
+        console.log(`[Tunnel] New Remote Doctor URL: ${FRONTEND_HOST}/doctor?server=${encodeURIComponent(tunnel.url)}`);
       } catch (e) {
         console.error('[Tunnel] Reconnect failed:', e.message);
       }
