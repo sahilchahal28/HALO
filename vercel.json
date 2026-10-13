@@ -1,7 +1,6 @@
 {
   "rewrites": [
-    { "source": "/api/documents/:path*", "destination": "https://biz-exceed-signatures-deaths.trycloudflare.com/api/documents/:path*" },
-    { "source": "/api/:path*", "destination": "https://halo-production-34b4.up.railway.app/api/:path*" },
+    { "source": "/api/:path*", "destination": "https://biz-exceed-signatures-deaths.trycloudflare.com/api/:path*" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
