@@ -7,10 +7,6 @@ export async function getInventory() {
   return await InventoryItem.find({});
 }
 
-export async function getTransactions() {
-  return await InventoryTransaction.find({}).sort({ timestamp: -1 }).limit(100);
-}
-
 export async function logMovement({ itemId, type, quantity, notes, patientId, episodeId }, actor) {
   const item = await InventoryItem.findOne({ itemId });
   if (!item) throw new Error('Inventory Item not found');

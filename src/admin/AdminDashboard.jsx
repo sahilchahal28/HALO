@@ -5,11 +5,9 @@ import {
   Building2, Users, Bed, Truck, Droplet, Package,
   UserPlus, Plus, Search, Calendar, ChevronRight, AlertTriangle,
   Activity, Pill, FlaskConical, Stethoscope, QrCode,
-  CheckCircle2, XCircle, Clock, FileText, MapPin, Filter, Check, X, FileCheck, Printer, History, ShieldAlert, Scissors, KeyRound,
-  Sparkles, ArrowUpRight
+  CheckCircle2, XCircle, Clock, FileText, MapPin, Filter, Check, X, FileCheck, Printer, History, ShieldAlert, Scissors, KeyRound
 } from 'lucide-react';
 import QRCode from 'qrcode';
-import PharmacyExecutiveDashboard from './components/PharmacyExecutiveDashboard';
 
 const getCategoryIcon = (category) => {
   const norm = (category || '').toUpperCase();
@@ -165,7 +163,6 @@ export default function AdminDashboard() {
 
   // Inventory movement State
   const [invMove, setInvMove] = useState({ itemId: '', type: 'Received', qty: 1, notes: '' });
-  const [showPharmacyExecutiveDashboard, setShowPharmacyExecutiveDashboard] = useState(false);
 
   // Surgery Register & OT Management State
   const [surgForm, setSurgForm] = useState({ patientId: '', procedure: '', doctorId: '', theatre: 'OT-01', time: '' });
@@ -868,30 +865,17 @@ export default function AdminDashboard() {
 
         {/* 2. Secondary Sub-Nav (Apple Frosted Glass, 52px) */}
         <div className="h-13 border-b border-hairline frosted-glass flex justify-between items-center px-6">
-          <div className="flex items-center gap-4">
-            <h1 className="text-xl font-semibold text-ink tracking-tight">
-              {activeTab === 'overview' && 'Command Center Dashboard'}
-              {activeTab === 'register' && 'Register Patient'}
-              {activeTab === 'patients' && 'Patients Directory'}
-              {activeTab === 'beds' && 'Ward Bed Allocations'}
-              {activeTab === 'doctors' && 'Doctors Registry'}
-              {activeTab === 'ambulance' && 'Ambulance Coordinates'}
-              {activeTab === 'blood' && 'Blood Bank Storage'}
-              {activeTab === 'inventory' && 'Pharmacy Ledger'}
-              {activeTab === 'surgeries' && 'OT Operating Scheduler'}
-            </h1>
-            {activeTab === 'inventory' && (
-              <button
-                type="button"
-                onClick={() => setShowPharmacyExecutiveDashboard(true)}
-                className="px-3.5 py-1.5 bg-[#ff5c35] hover:bg-[#e04a25] text-white rounded-full font-bold text-xs tracking-wide shadow-sm flex items-center gap-1.5 transition-all cursor-pointer"
-              >
-                <Sparkles size={13} />
-                <span>Executive Dashboard Mode</span>
-                <ArrowUpRight size={13} />
-              </button>
-            )}
-          </div>
+          <h1 className="text-xl font-semibold text-ink tracking-tight">
+            {activeTab === 'overview' && 'Command Center Dashboard'}
+            {activeTab === 'register' && 'Register Patient'}
+            {activeTab === 'patients' && 'Patients Directory'}
+            {activeTab === 'beds' && 'Ward Bed Allocations'}
+            {activeTab === 'doctors' && 'Doctors Registry'}
+            {activeTab === 'ambulance' && 'Ambulance Coordinates'}
+            {activeTab === 'blood' && 'Blood Bank Storage'}
+            {activeTab === 'inventory' && 'Pharmacy Ledger'}
+            {activeTab === 'surgeries' && 'OT Operating Scheduler'}
+          </h1>
           <div className="flex items-center gap-2 text-xs text-ink-muted-48">
             <span>OPERATIONAL STATE: ACTIVE</span>
           </div>
@@ -956,23 +940,10 @@ export default function AdminDashboard() {
           </button>
           <button
             onClick={() => setActiveTab('inventory')}
-            className={`w-full text-left justify-between px-3.5 py-2.5 rounded-[11px] text-sm flex items-center gap-3 transition-all cursor-pointer ${activeTab === 'inventory' ? 'bg-ink text-canvas font-semibold shadow-sm' : 'text-ink hover:bg-divider-soft font-medium'}`}
+            className={`w-full text-left justify-start px-3.5 py-2.5 rounded-[11px] text-sm flex items-center gap-3 transition-all cursor-pointer ${activeTab === 'inventory' ? 'bg-ink text-canvas font-semibold shadow-sm' : 'text-ink hover:bg-divider-soft font-medium'}`}
           >
-            <div className="flex items-center gap-3">
-              <Package size={16} className="shrink-0" />
-              <span>Pharmacy Inventory</span>
-            </div>
-            <span
-              onClick={(e) => {
-                e.stopPropagation();
-                setActiveTab('inventory');
-                setShowPharmacyExecutiveDashboard(true);
-              }}
-              className="text-[9px] bg-[#ff5c35] text-white px-2 py-0.5 rounded-full font-bold uppercase tracking-wider hover:bg-[#e04a25]"
-              title="Open Executive Dashboard"
-            >
-              Dashboard
-            </span>
+            <Package size={16} className="shrink-0" />
+            <span>Pharmacy Inventory</span>
           </button>
           <button
             onClick={() => setActiveTab('surgeries')}
@@ -2746,43 +2717,7 @@ export default function AdminDashboard() {
 
           {/* ==================== INVENTORY SUPPLIES TAB ==================== */}
           {activeTab === 'inventory' && (
-            <div className="space-y-6">
-
-              {/* Pharmacy Intelligence Executive Dashboard Launch Banner Card */}
-              <div
-                className="bg-canvas border border-hairline p-6 flex flex-col md:flex-row md:items-center justify-between gap-5 apple-product-shadow"
-                style={{ borderRadius: '24px' }}
-              >
-                <div className="flex items-center gap-4">
-                  <div className="w-14 h-14 rounded-2xl bg-[#ff5c35] text-white flex items-center justify-center shadow-md font-bold shrink-0">
-                    <Pill size={28} />
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h3 className="text-base font-bold text-ink">Pharmacy Central Inventory & Formulary</h3>
-                      <span className="text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-200 px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider">
-                        Live Cloud Sync
-                      </span>
-                    </div>
-                    <p className="text-xs text-ink-muted-48 mt-1">
-                      Full inventory management suite: drug stockpiles, batch expiries, dispensing velocity & cold-chain vaults.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-3 shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => setShowPharmacyExecutiveDashboard(true)}
-                    className="px-5 py-3 bg-[#11142d] hover:bg-black text-white rounded-full font-semibold text-xs tracking-wide shadow-md hover:shadow-lg transition-all flex items-center gap-2.5 cursor-pointer border border-neutral-700 hover:scale-[1.02]"
-                  >
-                    <Sparkles size={14} className="text-[#ff5c35]" />
-                    <span>Open Pharmacy Executive Dashboard</span>
-                    <ArrowUpRight size={14} className="text-neutral-400" />
-                  </button>
-                </div>
-              </div>
-
+            <div className="space-y-8">
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
 
                 {/* Supplies table */}
@@ -2790,21 +2725,7 @@ export default function AdminDashboard() {
                   className="lg:col-span-2 bg-canvas border border-hairline p-6"
                   style={{ borderRadius: '18px' }}
                 >
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6 pb-4 border-b border-hairline">
-                    <div>
-                      <h3 className="text-xs text-ink-muted-48 tracking-widest uppercase font-semibold">Stock Ledger List</h3>
-                      <p className="text-[11px] text-ink-muted-48 mt-0.5">Real-time formulary stock levels, storage locations and batches.</p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setShowPharmacyExecutiveDashboard(true)}
-                      className="px-4 py-2 bg-[#11142d] hover:bg-black text-white rounded-full font-semibold text-xs tracking-wide shadow-sm flex items-center gap-2 cursor-pointer border border-neutral-700 hover:scale-[1.02] transition-all"
-                    >
-                      <Sparkles size={13} className="text-[#ff5c35]" />
-                      <span>Executive Dashboard Mode</span>
-                      <ArrowUpRight size={13} className="text-neutral-400" />
-                    </button>
-                  </div>
+                  <h3 className="text-xs text-ink-muted-48 tracking-widest uppercase mb-4 font-semibold">Stock Ledger List</h3>
 
                   <div className="overflow-x-auto">
                     <table className="w-full text-left border-collapse text-xs">
@@ -4125,17 +4046,6 @@ export default function AdminDashboard() {
           </div>
         </div>
       )}
-      {/* Finexy-Inspired Executive Pharmacy Dashboard Full Overlay */}
-      {showPharmacyExecutiveDashboard && (
-        <PharmacyExecutiveDashboard
-          onClose={() => setShowPharmacyExecutiveDashboard(false)}
-          inventory={inventory}
-          setInventory={setInventory}
-          refreshData={refreshData}
-          addToast={addToast}
-        />
-      )}
-
     </div>
   );
 }
