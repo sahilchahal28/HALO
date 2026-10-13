@@ -134,10 +134,17 @@ export default function PatientDocumentsPanel({
       }
     };
 
+    const handleOnline = () => {
+      loadDocumentsFromStore();
+      triggerSync();
+    };
+
     window.addEventListener('halo:store:updated', handleStoreUpdated);
+    window.addEventListener('online', handleOnline);
 
     return () => {
       window.removeEventListener('halo:store:updated', handleStoreUpdated);
+      window.removeEventListener('online', handleOnline);
       HALOArchive.unsubscribePatient(patientId);
     };
   }, [patientId, loadDocumentsFromStore, triggerSync]);

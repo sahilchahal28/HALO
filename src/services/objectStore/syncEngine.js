@@ -16,10 +16,11 @@
 
 import { ObjectStore } from './index.js';
 import { runLocalRetentionPurge } from './retentionWorker.js';
-import { getApiBase } from '../../utils/api.js';
+import { api, getApiBase } from '../../utils/api.js';
 
 let _activeSocket = null;
 let _currentSubscribedPatientId = null;
+let _currentRole = 'DOCTOR';
 
 function getAuthToken() {
   try {
@@ -27,6 +28,19 @@ function getAuthToken() {
   } catch (_) {
     return null;
   }
+}
+
+// Global online event handler for auto-recovering when Wi-Fi is restored
+if (typeof window !== 'undefined') {
+  window.addEventListener('online', () => {
+    console.log('[HALOArchive] Network restored (online event). Reconnecting socket and syncing deltas...');
+    if (_activeSocket && !_activeSocket.connected) {
+      try { _activeSocket.connect(); } catch (_) {}
+    }
+    if (_currentSubscribedPatientId) {
+      HALOArchive.syncDelta({ patientId: _currentSubscribedPatientId, role: _currentRole });
+    }
+  });
 }
 
 export const HALOArchive = {
@@ -40,20 +54,32 @@ export const HALOArchive = {
   bindSocket(socket, role = 'DOCTOR', patientId = null) {
     if (!socket) return;
     _activeSocket = socket;
+    _currentRole = role;
+    if (patientId) {
+      _currentSubscribedPatientId = patientId;
+    }
     ObjectStore.setRole(role);
 
     // Clean up any existing listeners to prevent duplicates
     socket.off('document:uploaded', this._handleDocumentUploaded);
     socket.off('document:deleted', this._handleDocumentDeleted);
+    socket.off('connect', this._handleSocketConnect);
 
     // Register handlers
     socket.on('document:uploaded', this._handleDocumentUploaded);
     socket.on('document:deleted', this._handleDocumentDeleted);
+    socket.on('connect', () => {
+      console.log('[HALOArchive] Socket connected/reconnected.');
+      if (_currentSubscribedPatientId) {
+        socket.emit('subscribe:patient', _currentSubscribedPatientId);
+        console.log(`[HALOArchive] Re-subscribed to patient ${_currentSubscribedPatientId} on reconnect`);
+        // Immediately fetch deltas upon reconnect to catch mutations that occurred while offline
+        this.syncDelta({ patientId: _currentSubscribedPatientId, role: _currentRole });
+      }
+    });
 
     // Handle room subscriptions based on role
-    if (role === 'PATIENT' && patientId) {
-      this.subscribePatient(patientId);
-    } else if (role === 'DOCTOR' && patientId) {
+    if (patientId) {
       this.subscribePatient(patientId);
     }
   },
@@ -62,21 +88,25 @@ export const HALOArchive = {
    * Subscribe to a patient's real-time document room.
    */
   subscribePatient(patientId) {
-    if (!_activeSocket || !patientId) return;
+    if (!patientId) return;
     if (_currentSubscribedPatientId && _currentSubscribedPatientId !== patientId) {
       this.unsubscribePatient(_currentSubscribedPatientId);
     }
     _currentSubscribedPatientId = patientId;
-    _activeSocket.emit('subscribe:patient', patientId);
-    console.log(`[HALOArchive] Subscribed to real-time room for patient: ${patientId}`);
+    if (_activeSocket) {
+      _activeSocket.emit('subscribe:patient', patientId);
+      console.log(`[HALOArchive] Subscribed to real-time room for patient: ${patientId}`);
+    }
   },
 
   /**
    * Unsubscribe from a patient's document room.
    */
   unsubscribePatient(patientId) {
-    if (!_activeSocket || !patientId) return;
-    _activeSocket.emit('unsubscribe:patient', patientId);
+    if (!patientId) return;
+    if (_activeSocket) {
+      _activeSocket.emit('unsubscribe:patient', patientId);
+    }
     if (_currentSubscribedPatientId === patientId) {
       _currentSubscribedPatientId = null;
     }
@@ -151,6 +181,7 @@ export const HALOArchive = {
    * @param {string} [options.since] - ISO timestamp of last sync
    */
   async syncDelta({ patientId, role = 'DOCTOR', since = null } = {}) {
+    _currentRole = role;
     ObjectStore.setRole(role);
 
     if (role !== 'ADMIN' && !patientId) {
@@ -158,30 +189,17 @@ export const HALOArchive = {
       return [];
     }
 
-    const base = getApiBase();
-    const token = getAuthToken();
     const queryParams = new URLSearchParams();
     if (patientId) queryParams.set('patientId', patientId);
     if (since) queryParams.set('since', since);
 
-    const url = `${base}/api/documents/sync-delta?${queryParams.toString()}`;
-
     try {
-      const res = await fetch(url, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          'bypass-tunnel-reminder': 'true',
-          'ngrok-skip-browser-warning': 'true',
-          ...(token && { Authorization: `Bearer ${token}` }),
-        },
-      });
-
-      if (!res.ok) {
-        throw new Error(`Sync delta failed with status ${res.status}`);
+      // Use api.get which features timeout, retry, stale IP recovery, and token handling
+      const deltas = await api.get(`/documents/sync-delta?${queryParams.toString()}`);
+      if (!Array.isArray(deltas)) {
+        return [];
       }
 
-      const deltas = await res.json();
       console.log(`[HALOArchive] Received ${deltas.length} delta items from server.`);
 
       for (const item of deltas) {
@@ -191,8 +209,23 @@ export const HALOArchive = {
         if (action === 'delete') {
           await ObjectStore.deleteObject(fileKey);
         } else if (action === 'upsert') {
-          const exists = await ObjectStore.exists(fileKey);
-          if (!exists) {
+          let existing = await ObjectStore.getObject(fileKey);
+          if (!existing && documentId) {
+            existing = await ObjectStore.getObjectByDocumentId(documentId);
+          }
+
+          if (existing && existing.blob && existing.blob.size > 0) {
+            // Preserve the downloaded binary blob, but update metadata
+            await ObjectStore.putObject({
+              key: fileKey,
+              blob: existing.blob,
+              metadata: {
+                ...existing.metadata,
+                ...metadata,
+                documentId,
+              },
+            });
+          } else {
             // Lazy sync: save metadata with placeholder blob
             const placeholderBlob = new Blob([], { type: metadata?.mimeType || 'application/octet-stream' });
             await ObjectStore.putObject({
@@ -210,7 +243,7 @@ export const HALOArchive = {
       // Run local 6-month retention purge
       await runLocalRetentionPurge(role);
 
-      // Dispatch update event
+      // Dispatch update event to let React components refresh
       window.dispatchEvent(
         new CustomEvent('halo:store:updated', {
           detail: { patientId, syncedCount: deltas.length },
@@ -232,7 +265,7 @@ export const HALOArchive = {
    * @param {string} params.documentId
    * @param {string} params.fileKey
    * @param {Object} [params.metadata]
-   * @returns {Promise<{ blob: Blob, blobUrl: string }>}
+   * @returns {Promise<{ blob: Blob, blobUrl: string, cached: boolean }>}
    */
   async fetchAndCacheBlob({ documentId, fileKey, metadata = {} }) {
     if (!documentId && !fileKey) {
@@ -250,23 +283,82 @@ export const HALOArchive = {
         };
       }
     }
+    if (documentId) {
+      const existingByDoc = await ObjectStore.getObjectByDocumentId(documentId);
+      if (existingByDoc && existingByDoc.blob && existingByDoc.blob.size > 0) {
+        return {
+          blob: existingByDoc.blob,
+          blobUrl: existingByDoc.blobUrl,
+          cached: true,
+        };
+      }
+    }
 
-    // 2. Fetch from server's binary stream
+    // 2. Fetch from server's binary stream with timeout and fallback
     const base = getApiBase();
     const token = getAuthToken();
-    const url = `${base}/api/documents/${documentId}/blob`;
 
-    const res = await fetch(url, {
-      method: 'GET',
-      headers: {
-        'bypass-tunnel-reminder': 'true',
-        'ngrok-skip-browser-warning': 'true',
-        ...(token && { Authorization: `Bearer ${token}` }),
-      },
-    });
+    const fetchStream = async (baseUrl) => {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 10000); // 10s timeout
+      try {
+        const url = `${baseUrl}/api/documents/${documentId}/blob`;
+        const res = await fetch(url, {
+          method: 'GET',
+          signal: controller.signal,
+          headers: {
+            'bypass-tunnel-reminder': 'true',
+            'ngrok-skip-browser-warning': 'true',
+            ...(token && { Authorization: `Bearer ${token}` }),
+          },
+        });
+        clearTimeout(timer);
+        return res;
+      } catch (e) {
+        clearTimeout(timer);
+        throw e;
+      }
+    };
 
-    if (!res.ok) {
-      throw new Error(`Failed to fetch document blob (${res.status}). It may have expired or been deleted.`);
+    let res = null;
+    try {
+      res = await fetchStream(base);
+      if (!res.ok && base) {
+        // Try same-origin fallback if custom base returned an error
+        try {
+          const fallbackRes = await fetchStream('');
+          if (fallbackRes.ok) res = fallbackRes;
+        } catch (_) {}
+      }
+    } catch (_) {
+      // If primary base timed out or failed, try same-origin fallback
+      if (base) {
+        try {
+          res = await fetchStream('');
+        } catch (_) {}
+      }
+    }
+
+    if (!res || !res.ok) {
+      // Offline fallback: check if we have any cached blob even with a different key
+      if (fileKey) {
+        const fallback = await ObjectStore.getObject(fileKey);
+        if (fallback && fallback.blob && fallback.blob.size > 0) {
+          return { blob: fallback.blob, blobUrl: fallback.blobUrl, cached: true };
+        }
+      }
+      if (documentId) {
+        const fallback = await ObjectStore.getObjectByDocumentId(documentId);
+        if (fallback && fallback.blob && fallback.blob.size > 0) {
+          return { blob: fallback.blob, blobUrl: fallback.blobUrl, cached: true };
+        }
+      }
+
+      throw new Error(
+        !navigator.onLine
+          ? 'You are offline. This document has not been downloaded to your device yet. Reconnect to Wi-Fi to view.'
+          : (res ? `Failed to load document (${res.status}).` : 'Unable to connect to archive server. Please verify your Wi-Fi connection.')
+      );
     }
 
     const rawBlob = await res.blob();

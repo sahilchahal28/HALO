@@ -92,10 +92,17 @@ export default function MyDocumentsPanel({ user, patientEpisode }) {
       }
     };
 
+    const handleOnline = () => {
+      loadDocuments();
+      syncWithMacArchive();
+    };
+
     window.addEventListener('halo:store:updated', handleUpdate);
+    window.addEventListener('online', handleOnline);
 
     return () => {
       window.removeEventListener('halo:store:updated', handleUpdate);
+      window.removeEventListener('online', handleOnline);
       HALOArchive.unsubscribePatient(patientId);
     };
   }, [patientId, loadDocuments, syncWithMacArchive]);

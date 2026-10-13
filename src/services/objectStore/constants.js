@@ -13,7 +13,7 @@ export const DB_NAMES = {
   PATIENT: 'halo_patient_store',
 };
 
-export const DB_VERSION = 1;
+export const DB_VERSION = 2;
 
 // ── Object store names ───────────────────────────────────────────────────────
 export const STORES = {

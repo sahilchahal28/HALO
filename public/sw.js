@@ -86,7 +86,11 @@ self.addEventListener('fetch', (event) => {
   // API requests: Network-first with cache fallback so the app shows data offline.
   // Non-GET mutations pass straight through (queued client-side on failure).
   if (requestUrl.pathname.startsWith('/api/')) {
-    if (event.request.headers.get('accept')?.includes('text/event-stream')) {
+    if (
+      event.request.headers.get('accept')?.includes('text/event-stream') ||
+      requestUrl.pathname.includes('/blob') ||
+      requestUrl.pathname.includes('/file/')
+    ) {
       return;
     }
     event.respondWith(

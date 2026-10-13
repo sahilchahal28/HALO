@@ -37,6 +37,7 @@ export function openDB(dbName) {
 
         // Single-field indexes
         store.createIndex('patientId',    'patientId',    { unique: false });
+        store.createIndex('documentId',   'documentId',   { unique: false });
         store.createIndex('department',   'department',   { unique: false });
         store.createIndex('type',         'type',         { unique: false });
         store.createIndex('uploadedAt',   'uploadedAt',   { unique: false });
@@ -46,6 +47,11 @@ export function openDB(dbName) {
         // Compound indexes for fast common queries
         store.createIndex('patientId+type',       ['patientId', 'type'],       { unique: false });
         store.createIndex('patientId+department', ['patientId', 'department'], { unique: false });
+      } else {
+        const store = request.transaction.objectStore(STORES.OBJECTS);
+        if (!store.indexNames.contains('documentId')) {
+          store.createIndex('documentId', 'documentId', { unique: false });
+        }
       }
 
       // ── "sync_state" store ────────────────────────────────────────────────

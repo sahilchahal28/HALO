@@ -133,6 +133,45 @@ export const ObjectStore = {
   },
 
   /**
+   * Retrieve an object by its documentId.
+   * Useful when fileKey is unknown or during delta sync resolution.
+   *
+   * @param {string} documentId
+   * @returns {Promise<{ key: string, blob: Blob, blobUrl: string, metadata: Object } | null>}
+   */
+  async getObjectByDocumentId(documentId) {
+    if (!documentId) return null;
+    const db = await getDB();
+
+    const record = await withTransaction(db, [STORES.OBJECTS], 'readonly', async (tx) => {
+      const store = tx.objectStore(STORES.OBJECTS);
+      if (store.indexNames.contains('documentId')) {
+        const index = store.index('documentId');
+        return new Promise((resolve, reject) => {
+          const req = index.get(documentId);
+          req.onsuccess = () => resolve(req.result || null);
+          req.onerror = () => reject(req.error);
+        });
+      }
+      // Fallback in-memory scan if index not created yet
+      const all = await getAll(store);
+      return all.find((r) => r.documentId === documentId) || null;
+    });
+
+    if (!record) return null;
+
+    const blobUrl = URL.createObjectURL(record.blob);
+    const { blob, ...metadata } = record;
+
+    return {
+      key: record.fileKey,
+      blob,
+      blobUrl,
+      metadata,
+    };
+  },
+
+  /**
    * Delete an object by key.
    *
    * @param {string} key

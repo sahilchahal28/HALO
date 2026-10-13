@@ -164,11 +164,15 @@ async function refreshSession() {
       const base = getApiBase();
       let lastError = null;
       for (let attempt = 0; attempt < 3; attempt++) {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 4000);
         try {
           const res = await fetch(`${base}/api/auth/refresh`, {
             method: 'POST',
             credentials: base ? 'include' : 'same-origin',
+            signal: controller.signal,
           });
+          clearTimeout(timeoutId);
           if (res.ok) {
             const data = await res.json();
             if (data.token) setToken(data.token);
@@ -185,17 +189,22 @@ async function refreshSession() {
           if (res.status === 401) return SESSION_REJECTED;
           lastError = new ApiError(`Refresh failed (${res.status})`, res.status);
         } catch (e) {
+          clearTimeout(timeoutId);
           // Network error on a custom base — the stored URL may be dead. Drop it
           // and retry same-origin once (keeps the session alive on reload).
           if (attempt === 0 && base) {
             try { localStorage.removeItem(SERVER_URL_KEY); } catch (_) {}
             const fallbackBase = getApiBase();
             if (fallbackBase !== base) {
+              const fallbackController = new AbortController();
+              const fallbackTimeoutId = setTimeout(() => fallbackController.abort(), 4000);
               try {
                 const res2 = await fetch(`${fallbackBase}/api/auth/refresh`, {
                   method: 'POST',
                   credentials: fallbackBase ? 'include' : 'same-origin',
+                  signal: fallbackController.signal,
                 });
+                clearTimeout(fallbackTimeoutId);
                 if (res2.ok) {
                   const data2 = await res2.json();
                   if (data2.token) setToken(data2.token);
@@ -203,7 +212,9 @@ async function refreshSession() {
                 }
                 // Same-origin also gave 401 — session truly rejected
                 if (res2.status === 401) return SESSION_REJECTED;
-              } catch (_) {}
+              } catch (_) {
+                clearTimeout(fallbackTimeoutId);
+              }
             }
           }
           lastError = e instanceof ApiError ? e : new ApiError(e.message, undefined);
@@ -247,6 +258,14 @@ async function rawRequest(endpoint, options = {}, isRetry = false) {
   // when same-origin we keep 'same-origin'.
   const credentials = base ? 'include' : 'same-origin';
 
+  const timeoutMs = options.timeout || (options.body instanceof FormData ? 25000 : 7000);
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  if (options.signal) {
+    options.signal.addEventListener('abort', () => controller.abort());
+  }
+
   let response;
   try {
     response = await fetch(`${base}/api${endpoint}`, {
@@ -254,18 +273,24 @@ async function rawRequest(endpoint, options = {}, isRetry = false) {
       body,
       headers,
       credentials,
+      signal: controller.signal,
     });
   } catch (_) {
+    clearTimeout(timeoutId);
     // A dead/unreachable custom base throws instead of responding. For safe
     // endpoints (auth + GETs), drop the poisoned base and retry same-origin.
-    if (!isRetry && base && (endpoint.startsWith('/auth/') || (options.method || 'GET') === 'GET')) {
+    if (!isRetry && base) {
       try { localStorage.removeItem(SERVER_URL_KEY); } catch (_) {}
-      return rawRequest(endpoint, options, true);
+      if (endpoint.startsWith('/auth/') || (options.method || 'GET') === 'GET') {
+        return rawRequest(endpoint, options, true);
+      }
     }
     throw new ApiError(
       `Network error: Unable to reach the HALO server at ${base || 'same-origin'}. Make sure the backend server is running, then check Host Server Settings (Reset Default uses the built-in connection).`,
       undefined
     );
+  } finally {
+    clearTimeout(timeoutId);
   }
 
   if (response.status === 204) return null;

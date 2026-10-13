@@ -226,6 +226,7 @@ export function AppProvider({ children }) {
         );
         if (flushed > 0) addToast(`${flushed} offline change(s) synced successfully`, 'success');
       } catch (_) { }
+      refreshDataRef.current?.();
     };
     const goOffline = () => setIsOffline(true);
 
