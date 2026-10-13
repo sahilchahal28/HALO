@@ -130,7 +130,12 @@ export async function streamDocumentBlob(req, res, next) {
       actorRole,
     });
 
-    res.setHeader('Content-Type', mimeType);
+    let finalMime = mimeType;
+    if ((!finalMime || finalMime === 'application/octet-stream') && filePath.toLowerCase().endsWith('.pdf')) {
+      finalMime = 'application/pdf';
+    }
+
+    res.setHeader('Content-Type', finalMime);
     res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(filename)}"`);
     res.setHeader('Cache-Control', 'private, max-age=3600');
 

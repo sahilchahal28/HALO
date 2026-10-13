@@ -166,16 +166,27 @@ export default function PatientDocumentsPanel({
 
   // Inline Preview Handler
   const handlePreview = async (doc) => {
-    const docId = doc.documentId || doc.fileKey;
+    const docId = doc.documentId || doc.fileKey || doc.s3Key;
     setActionLoadingDocId(docId);
     try {
-      const { blobUrl } = await HALOArchive.fetchAndCacheBlob({
+      const { blobUrl, blob } = await HALOArchive.fetchAndCacheBlob({
         documentId: doc.documentId,
-        fileKey: doc.fileKey,
+        fileKey: doc.fileKey || doc.s3Key || doc.fileRef,
         metadata: doc,
       });
+      const isPdfFile = Boolean(
+        doc.mimeType === 'application/pdf' ||
+        blob?.type === 'application/pdf' ||
+        /\.pdf$/i.test(doc.fileKey || '') ||
+        /\.pdf$/i.test(doc.s3Key || '') ||
+        /\.pdf$/i.test(doc.fileRef || '') ||
+        /\.pdf$/i.test(doc.title || '')
+      );
       setPreviewBlobUrl(blobUrl);
-      setPreviewDoc(doc);
+      setPreviewDoc({
+        ...doc,
+        mimeType: isPdfFile ? 'application/pdf' : (doc.mimeType || blob?.type),
+      });
     } catch (err) {
       // Fallback: try downloadUrl from server API
       try {

@@ -68,11 +68,27 @@ export const ObjectStore = {
       console.warn('[ObjectStore] Storage budget check warning:', e.message);
     }
 
+    let mimeType = blob.type || metadata.mimeType || 'application/octet-stream';
+    const isPdfFile =
+      mimeType === 'application/pdf' ||
+      /\.pdf$/i.test(key || '') ||
+      /\.pdf$/i.test(metadata.title || '') ||
+      /\.pdf$/i.test(metadata.s3Key || '') ||
+      /\.pdf$/i.test(metadata.fileRef || '');
+    if (isPdfFile) {
+      mimeType = 'application/pdf';
+    }
+
+    let storageBlob = blob;
+    if (isPdfFile && blob && blob.type !== 'application/pdf' && blob.size > 0) {
+      storageBlob = new Blob([blob], { type: 'application/pdf' });
+    }
+
     const record = {
       fileKey: key,
-      blob,
+      blob: storageBlob,
       fileSize: size,
-      mimeType: blob.type || metadata.mimeType || 'application/octet-stream',
+      mimeType,
       patientId: String(metadata.patientId).trim().toUpperCase(),
       documentId: metadata.documentId || null,
       type: metadata.type || 'OTHER',
@@ -121,14 +137,26 @@ export const ObjectStore = {
 
     if (!record) return null;
 
-    const blobUrl = URL.createObjectURL(record.blob);
-    const { blob, ...metadata } = record;
+    let blob = record.blob;
+    const isPdf =
+      record.mimeType === 'application/pdf' ||
+      /\.pdf$/i.test(key || '') ||
+      /\.pdf$/i.test(record.title || '');
+    if (isPdf && blob && blob.type !== 'application/pdf' && blob.size > 0) {
+      blob = new Blob([blob], { type: 'application/pdf' });
+    }
+
+    const blobUrl = blob && blob.size > 0 ? URL.createObjectURL(blob) : null;
+    const { blob: _, ...metadata } = record;
 
     return {
       key,
       blob,
       blobUrl,
-      metadata,
+      metadata: {
+        ...metadata,
+        mimeType: isPdf ? 'application/pdf' : record.mimeType,
+      },
     };
   },
 
@@ -160,14 +188,26 @@ export const ObjectStore = {
 
     if (!record) return null;
 
-    const blobUrl = URL.createObjectURL(record.blob);
-    const { blob, ...metadata } = record;
+    let blob = record.blob;
+    const isPdf =
+      record.mimeType === 'application/pdf' ||
+      /\.pdf$/i.test(record.fileKey || '') ||
+      /\.pdf$/i.test(record.title || '');
+    if (isPdf && blob && blob.type !== 'application/pdf' && blob.size > 0) {
+      blob = new Blob([blob], { type: 'application/pdf' });
+    }
+
+    const blobUrl = blob && blob.size > 0 ? URL.createObjectURL(blob) : null;
+    const { blob: _, ...metadata } = record;
 
     return {
       key: record.fileKey,
       blob,
       blobUrl,
-      metadata,
+      metadata: {
+        ...metadata,
+        mimeType: isPdf ? 'application/pdf' : record.mimeType,
+      },
     };
   },
 
@@ -326,10 +366,17 @@ export const ObjectStore = {
     const paginated = filtered.slice(startIndex, startIndex + limitNum);
 
     // Strip binary Blob to avoid memory overhead in metadata views
-    const items = paginated.map(({ blob, ...meta }) => ({
-      ...meta,
-      hasCachedBlob: Boolean(blob),
-    }));
+    const items = paginated.map(({ blob, ...meta }) => {
+      const isPdf =
+        meta.mimeType === 'application/pdf' ||
+        /\.pdf$/i.test(meta.fileKey || '') ||
+        /\.pdf$/i.test(meta.title || '');
+      return {
+        ...meta,
+        mimeType: isPdf ? 'application/pdf' : meta.mimeType,
+        hasCachedBlob: Boolean(blob && blob.size > 0),
+      };
+    });
 
     return {
       items,

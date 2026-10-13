@@ -12,8 +12,22 @@ export default function PreviewModal({ document, previewUrl, onClose, onDownload
 
   if (!document || !previewUrl) return null;
 
-  const isPdf = document.mimeType === 'application/pdf' || document.title?.toLowerCase().endsWith('.pdf');
-  const isImage = document.mimeType?.startsWith('image/') || /\.(png|jpe?g|webp|gif|svg)$/i.test(document.title || '');
+  const isPdf = Boolean(
+    document.mimeType === 'application/pdf' ||
+    document.title?.toLowerCase().endsWith('.pdf') ||
+    document.fileKey?.toLowerCase().endsWith('.pdf') ||
+    document.s3Key?.toLowerCase().endsWith('.pdf') ||
+    document.fileRef?.toLowerCase().endsWith('.pdf') ||
+    (document.fileName && document.fileName.toLowerCase().endsWith('.pdf'))
+  );
+
+  const isImage = Boolean(
+    document.mimeType?.startsWith('image/') ||
+    /\.(png|jpe?g|webp|gif|svg)$/i.test(document.title || '') ||
+    /\.(png|jpe?g|webp|gif|svg)$/i.test(document.fileKey || '') ||
+    /\.(png|jpe?g|webp|gif|svg)$/i.test(document.s3Key || '') ||
+    /\.(png|jpe?g|webp|gif|svg)$/i.test(document.fileRef || '')
+  );
 
   return (
     <div 
@@ -51,11 +65,11 @@ export default function PreviewModal({ document, previewUrl, onClose, onDownload
               href={previewUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-xs font-medium text-ink hover:bg-canvas-parchment border border-hairline px-3 py-1.5 rounded-full hidden sm:flex items-center gap-1.5 transition-colors"
+              className="text-xs font-medium text-ink hover:bg-canvas-parchment border border-hairline px-3 py-1.5 rounded-full flex items-center gap-1.5 transition-colors"
               title="Open in new window"
             >
               <ExternalLink size={13} />
-              Pop out
+              <span>Pop out</span>
             </a>
             <button
               type="button"
@@ -69,13 +83,46 @@ export default function PreviewModal({ document, previewUrl, onClose, onDownload
         </div>
 
         {/* Content Viewer */}
-        <div className="flex-1 bg-canvas-parchment relative overflow-auto flex items-center justify-center p-2 sm:p-4">
+        <div className="flex-1 bg-canvas-parchment relative overflow-auto flex items-center justify-center p-2 sm:p-4 min-h-[400px]">
           {isPdf ? (
-            <iframe
-              src={previewUrl}
-              title={document.title}
-              className="w-full h-full rounded-[14px] border border-hairline shadow-sm bg-canvas"
-            />
+            <div className="w-full h-full flex flex-col rounded-[14px] overflow-hidden border border-hairline shadow-sm bg-canvas">
+              <object
+                data={`${previewUrl}#toolbar=1&navpanes=0`}
+                type="application/pdf"
+                className="w-full h-full flex-1"
+              >
+                <iframe
+                  src={`${previewUrl}#toolbar=1&navpanes=0`}
+                  title={document.title || 'PDF Document'}
+                  className="w-full h-full flex-1 border-0"
+                >
+                  <div className="flex flex-col items-center justify-center p-8 text-center space-y-3 h-full">
+                    <FileText size={48} className="mx-auto text-primary opacity-80" />
+                    <p className="text-sm font-semibold text-ink">PDF Document: {document.title}</p>
+                    <p className="text-xs text-ink-muted-48 max-w-sm">
+                      Inline PDF viewing is not supported on this browser. You can open it in a new window or download it.
+                    </p>
+                    <div className="flex items-center gap-2 pt-2">
+                      <a
+                        href={previewUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 bg-primary hover:bg-primary-focus text-canvas text-xs font-semibold px-4 py-2 rounded-full cursor-pointer transition-colors"
+                      >
+                        <ExternalLink size={14} /> Open in New Tab
+                      </a>
+                      <button
+                        type="button"
+                        onClick={onDownload}
+                        className="inline-flex items-center gap-1.5 bg-canvas border border-hairline hover:bg-canvas-parchment text-ink text-xs font-semibold px-4 py-2 rounded-full cursor-pointer transition-colors"
+                      >
+                        <Download size={14} /> Download PDF
+                      </button>
+                    </div>
+                  </div>
+                </iframe>
+              </object>
+            </div>
           ) : isImage ? (
             <div className="max-w-full max-h-full flex items-center justify-center">
               <img

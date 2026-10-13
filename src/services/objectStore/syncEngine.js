@@ -273,12 +273,27 @@ export const HALOArchive = {
     }
 
     // 1. Check if already stored in local IndexedDB with valid binary data
+    const wrapPdfBlobIfNeeded = (blob, key = '') => {
+      if (!blob || blob.size === 0) return blob;
+      const isPdf =
+        blob.type === 'application/pdf' ||
+        /\.pdf$/i.test(key) ||
+        /\.pdf$/i.test(metadata.title || '') ||
+        /\.pdf$/i.test(metadata.s3Key || '') ||
+        metadata.mimeType === 'application/pdf';
+      if (isPdf && blob.type !== 'application/pdf') {
+        return new Blob([blob], { type: 'application/pdf' });
+      }
+      return blob;
+    };
+
     if (fileKey) {
       const existing = await ObjectStore.getObject(fileKey);
       if (existing && existing.blob && existing.blob.size > 0) {
+        const ensuredBlob = wrapPdfBlobIfNeeded(existing.blob, fileKey);
         return {
-          blob: existing.blob,
-          blobUrl: existing.blobUrl,
+          blob: ensuredBlob,
+          blobUrl: URL.createObjectURL(ensuredBlob),
           cached: true,
         };
       }
@@ -286,9 +301,10 @@ export const HALOArchive = {
     if (documentId) {
       const existingByDoc = await ObjectStore.getObjectByDocumentId(documentId);
       if (existingByDoc && existingByDoc.blob && existingByDoc.blob.size > 0) {
+        const ensuredBlob = wrapPdfBlobIfNeeded(existingByDoc.blob, existingByDoc.key || fileKey || '');
         return {
-          blob: existingByDoc.blob,
-          blobUrl: existingByDoc.blobUrl,
+          blob: ensuredBlob,
+          blobUrl: URL.createObjectURL(ensuredBlob),
           cached: true,
         };
       }
@@ -344,13 +360,15 @@ export const HALOArchive = {
       if (fileKey) {
         const fallback = await ObjectStore.getObject(fileKey);
         if (fallback && fallback.blob && fallback.blob.size > 0) {
-          return { blob: fallback.blob, blobUrl: fallback.blobUrl, cached: true };
+          const ensuredBlob = wrapPdfBlobIfNeeded(fallback.blob, fileKey);
+          return { blob: ensuredBlob, blobUrl: URL.createObjectURL(ensuredBlob), cached: true };
         }
       }
       if (documentId) {
         const fallback = await ObjectStore.getObjectByDocumentId(documentId);
         if (fallback && fallback.blob && fallback.blob.size > 0) {
-          return { blob: fallback.blob, blobUrl: fallback.blobUrl, cached: true };
+          const ensuredBlob = wrapPdfBlobIfNeeded(fallback.blob, fallback.key || fileKey || '');
+          return { blob: ensuredBlob, blobUrl: URL.createObjectURL(ensuredBlob), cached: true };
         }
       }
 
@@ -362,11 +380,21 @@ export const HALOArchive = {
     }
 
     const rawBlob = await res.blob();
-    const mimeType = res.headers.get('Content-Type') || metadata.mimeType || rawBlob.type || 'application/octet-stream';
+    const targetKey = fileKey || `records/${metadata.patientId || 'GENERAL'}/${documentId}`;
+    let mimeType = res.headers.get('Content-Type') || metadata.mimeType || rawBlob.type || 'application/octet-stream';
+    const isPdfFile =
+      mimeType === 'application/pdf' ||
+      /\.pdf$/i.test(targetKey || '') ||
+      /\.pdf$/i.test(fileKey || '') ||
+      /\.pdf$/i.test(metadata.title || '') ||
+      /\.pdf$/i.test(metadata.s3Key || '') ||
+      /\.pdf$/i.test(metadata.fileRef || '');
+    if (isPdfFile) {
+      mimeType = 'application/pdf';
+    }
     const blob = new Blob([rawBlob], { type: mimeType });
 
     // 3. Store into local IndexedDB
-    const targetKey = fileKey || `records/${metadata.patientId || 'GENERAL'}/${documentId}`;
     await ObjectStore.putObject({
       key: targetKey,
       blob,
