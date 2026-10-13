@@ -347,6 +347,29 @@ async function rawRequest(endpoint, options = {}, isRetry = false) {
     return response.json();
   }
 
+  // If a document request (like /documents/upload or /documents/sync-delta) returned 404,
+  // fallback to the active Mac backend tunnel where the physical local storage lives.
+  if (response.status === 404 && endpoint.startsWith('/documents') && !isRetry) {
+    const archiveBase = 'https://biz-exceed-signatures-deaths.trycloudflare.com';
+    if (base !== archiveBase) {
+      try {
+        const archiveRes = await fetch(`${archiveBase}/api${endpoint}`, {
+          ...options,
+          body,
+          headers: {
+            ...headers,
+            'bypass-tunnel-reminder': 'true',
+          },
+          credentials: 'include',
+        });
+        if (archiveRes.ok) {
+          if (archiveRes.status === 204) return null;
+          return archiveRes.json();
+        }
+      } catch (_) {}
+    }
+  }
+
   const isTransientFinal = TRANSIENT_STATUSES.has(response.status);
   let errorMessage = isTransientFinal
     ? `Service temporarily unavailable (${response.status}). Retrying…`
@@ -403,9 +426,10 @@ async function request(endpoint, options = {}) {
 export function getFileUrl(downloadUrl) {
   if (!downloadUrl) return '';
   const base = getApiBase();
+  const effectiveBase = base || 'https://biz-exceed-signatures-deaths.trycloudflare.com';
   const url = downloadUrl.startsWith('http://') || downloadUrl.startsWith('https://') 
     ? downloadUrl 
-    : `${base}${downloadUrl}`;
+    : `${effectiveBase}${downloadUrl}`;
   const separator = url.includes('?') ? '&' : '?';
   return `${url}${separator}bypass-tunnel-reminder=true`;
 }

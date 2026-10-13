@@ -313,6 +313,7 @@ export const HALOArchive = {
     // 2. Fetch from server's binary stream with timeout and fallback
     const base = getApiBase();
     const token = getAuthToken();
+    const MAC_STORAGE_TUNNEL = 'https://biz-exceed-signatures-deaths.trycloudflare.com';
 
     const fetchStream = async (baseUrl) => {
       const controller = new AbortController();
@@ -339,19 +340,30 @@ export const HALOArchive = {
     let res = null;
     try {
       res = await fetchStream(base);
-      if (!res.ok && base) {
-        // Try same-origin fallback if custom base returned an error
-        try {
-          const fallbackRes = await fetchStream('');
-          if (fallbackRes.ok) res = fallbackRes;
-        } catch (_) {}
+      if (!res.ok) {
+        // Try direct Mac storage tunnel if custom/same-origin base returned an error
+        if (base !== MAC_STORAGE_TUNNEL) {
+          try {
+            const tunnelRes = await fetchStream(MAC_STORAGE_TUNNEL);
+            if (tunnelRes.ok) res = tunnelRes;
+          } catch (_) {}
+        }
+        if (!res?.ok && base) {
+          try {
+            const fallbackRes = await fetchStream('');
+            if (fallbackRes.ok) res = fallbackRes;
+          } catch (_) {}
+        }
       }
     } catch (_) {
-      // If primary base timed out or failed, try same-origin fallback
-      if (base) {
-        try {
-          res = await fetchStream('');
-        } catch (_) {}
+      try {
+        res = await fetchStream(MAC_STORAGE_TUNNEL);
+      } catch (_) {
+        if (base) {
+          try {
+            res = await fetchStream('');
+          } catch (_) {}
+        }
       }
     }
 
