@@ -868,17 +868,30 @@ export default function AdminDashboard() {
 
         {/* 2. Secondary Sub-Nav (Apple Frosted Glass, 52px) */}
         <div className="h-13 border-b border-hairline frosted-glass flex justify-between items-center px-6">
-          <h1 className="text-xl font-semibold text-ink tracking-tight">
-            {activeTab === 'overview' && 'Command Center Dashboard'}
-            {activeTab === 'register' && 'Register Patient'}
-            {activeTab === 'patients' && 'Patients Directory'}
-            {activeTab === 'beds' && 'Ward Bed Allocations'}
-            {activeTab === 'doctors' && 'Doctors Registry'}
-            {activeTab === 'ambulance' && 'Ambulance Coordinates'}
-            {activeTab === 'blood' && 'Blood Bank Storage'}
-            {activeTab === 'inventory' && 'Pharmacy Ledger'}
-            {activeTab === 'surgeries' && 'OT Operating Scheduler'}
-          </h1>
+          <div className="flex items-center gap-4">
+            <h1 className="text-xl font-semibold text-ink tracking-tight">
+              {activeTab === 'overview' && 'Command Center Dashboard'}
+              {activeTab === 'register' && 'Register Patient'}
+              {activeTab === 'patients' && 'Patients Directory'}
+              {activeTab === 'beds' && 'Ward Bed Allocations'}
+              {activeTab === 'doctors' && 'Doctors Registry'}
+              {activeTab === 'ambulance' && 'Ambulance Coordinates'}
+              {activeTab === 'blood' && 'Blood Bank Storage'}
+              {activeTab === 'inventory' && 'Pharmacy Ledger'}
+              {activeTab === 'surgeries' && 'OT Operating Scheduler'}
+            </h1>
+            {activeTab === 'inventory' && (
+              <button
+                type="button"
+                onClick={() => setShowPharmacyExecutiveDashboard(true)}
+                className="px-3.5 py-1.5 bg-[#ff5c35] hover:bg-[#e04a25] text-white rounded-full font-bold text-xs tracking-wide shadow-sm flex items-center gap-1.5 transition-all cursor-pointer"
+              >
+                <Sparkles size={13} />
+                <span>Executive Dashboard Mode</span>
+                <ArrowUpRight size={13} />
+              </button>
+            )}
+          </div>
           <div className="flex items-center gap-2 text-xs text-ink-muted-48">
             <span>OPERATIONAL STATE: ACTIVE</span>
           </div>
@@ -943,10 +956,23 @@ export default function AdminDashboard() {
           </button>
           <button
             onClick={() => setActiveTab('inventory')}
-            className={`w-full text-left justify-start px-3.5 py-2.5 rounded-[11px] text-sm flex items-center gap-3 transition-all cursor-pointer ${activeTab === 'inventory' ? 'bg-ink text-canvas font-semibold shadow-sm' : 'text-ink hover:bg-divider-soft font-medium'}`}
+            className={`w-full text-left justify-between px-3.5 py-2.5 rounded-[11px] text-sm flex items-center gap-3 transition-all cursor-pointer ${activeTab === 'inventory' ? 'bg-ink text-canvas font-semibold shadow-sm' : 'text-ink hover:bg-divider-soft font-medium'}`}
           >
-            <Package size={16} className="shrink-0" />
-            <span>Pharmacy Inventory</span>
+            <div className="flex items-center gap-3">
+              <Package size={16} className="shrink-0" />
+              <span>Pharmacy Inventory</span>
+            </div>
+            <span
+              onClick={(e) => {
+                e.stopPropagation();
+                setActiveTab('inventory');
+                setShowPharmacyExecutiveDashboard(true);
+              }}
+              className="text-[9px] bg-[#ff5c35] text-white px-2 py-0.5 rounded-full font-bold uppercase tracking-wider hover:bg-[#e04a25]"
+              title="Open Executive Dashboard"
+            >
+              Dashboard
+            </span>
           </button>
           <button
             onClick={() => setActiveTab('surgeries')}
@@ -2764,15 +2790,19 @@ export default function AdminDashboard() {
                   className="lg:col-span-2 bg-canvas border border-hairline p-6"
                   style={{ borderRadius: '18px' }}
                 >
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-xs text-ink-muted-48 tracking-widest uppercase font-semibold">Stock Ledger List</h3>
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6 pb-4 border-b border-hairline">
+                    <div>
+                      <h3 className="text-xs text-ink-muted-48 tracking-widest uppercase font-semibold">Stock Ledger List</h3>
+                      <p className="text-[11px] text-ink-muted-48 mt-0.5">Real-time formulary stock levels, storage locations and batches.</p>
+                    </div>
                     <button
                       type="button"
                       onClick={() => setShowPharmacyExecutiveDashboard(true)}
-                      className="text-[11px] text-[#ff5c35] hover:underline font-bold flex items-center gap-1 cursor-pointer"
+                      className="px-4 py-2 bg-[#11142d] hover:bg-black text-white rounded-full font-semibold text-xs tracking-wide shadow-sm flex items-center gap-2 cursor-pointer border border-neutral-700 hover:scale-[1.02] transition-all"
                     >
-                      <Sparkles size={12} />
+                      <Sparkles size={13} className="text-[#ff5c35]" />
                       <span>Executive Dashboard Mode</span>
+                      <ArrowUpRight size={13} className="text-neutral-400" />
                     </button>
                   </div>
 
