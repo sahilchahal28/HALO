@@ -348,9 +348,9 @@ async function rawRequest(endpoint, options = {}, isRetry = false) {
   }
 
   // If a document request (like /documents/upload or /documents/sync-delta) returned 404,
-  // fallback to the active Mac backend tunnel where the physical local storage lives.
+  // fallback to the active Railway backend where the physical storage lives.
   if (response.status === 404 && endpoint.startsWith('/documents') && !isRetry) {
-    const archiveBase = 'https://biz-exceed-signatures-deaths.trycloudflare.com';
+    const archiveBase = 'https://halo-production-8760181f.up.railway.app';
     if (base !== archiveBase) {
       try {
         const archiveRes = await fetch(`${archiveBase}/api${endpoint}`, {
@@ -426,7 +426,9 @@ async function request(endpoint, options = {}) {
 export function getFileUrl(downloadUrl) {
   if (!downloadUrl) return '';
   const base = getApiBase();
-  const effectiveBase = base || 'https://biz-exceed-signatures-deaths.trycloudflare.com';
+  const effectiveBase = base || (typeof window !== 'undefined' && window.location.hostname.endsWith('.vercel.app')
+    ? 'https://halo-production-8760181f.up.railway.app'
+    : (typeof window !== 'undefined' ? window.location.origin : 'https://halo-production-8760181f.up.railway.app'));
   const url = downloadUrl.startsWith('http://') || downloadUrl.startsWith('https://') 
     ? downloadUrl 
     : `${effectiveBase}${downloadUrl}`;

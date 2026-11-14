@@ -8,7 +8,7 @@ import { getApiBase } from './api';
  * - Production (Vercel): connects directly to the Railway backend because
  *   Vercel rewrites do not support WebSocket upgrades.
  */
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'https://halo-production-34b4.up.railway.app';
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'https://halo-production-8760181f.up.railway.app';
 
 export function createSocket(token) {
   const isProd = typeof window !== 'undefined' && window.location.hostname.endsWith('.vercel.app');

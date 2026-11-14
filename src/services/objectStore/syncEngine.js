@@ -363,7 +363,7 @@ export const HALOArchive = {
     // 2. Fetch from server's binary stream with timeout and fallback
     const base = getApiBase();
     const token = getAuthToken();
-    const MAC_STORAGE_TUNNEL = 'https://biz-exceed-signatures-deaths.trycloudflare.com';
+    const PRODUCTION_BACKEND = 'https://halo-production-8760181f.up.railway.app';
 
     const fetchStream = async (baseUrl) => {
       const controller = new AbortController();
@@ -391,10 +391,10 @@ export const HALOArchive = {
     try {
       res = await fetchStream(base);
       if (!res.ok) {
-        // Try direct Mac storage tunnel if custom/same-origin base returned an error
-        if (base !== MAC_STORAGE_TUNNEL) {
+        // Try direct production Railway backend if custom/same-origin base returned an error
+        if (base !== PRODUCTION_BACKEND) {
           try {
-            const tunnelRes = await fetchStream(MAC_STORAGE_TUNNEL);
+            const tunnelRes = await fetchStream(PRODUCTION_BACKEND);
             if (tunnelRes.ok) res = tunnelRes;
           } catch (_) {}
         }
@@ -407,7 +407,7 @@ export const HALOArchive = {
       }
     } catch (_) {
       try {
-        res = await fetchStream(MAC_STORAGE_TUNNEL);
+        res = await fetchStream(PRODUCTION_BACKEND);
       } catch (_) {
         if (base) {
           try {
