@@ -61,10 +61,11 @@ router.post('/', async (req, res, next) => {
 router.post('/:doctorId/reset-pin', async (req, res, next) => {
   try {
     const { doctorId } = req.params;
+    const cleanId = String(doctorId || '').trim();
     const doctor = await Doctor.findOne({
       $or: [
-        { doctorId },
-        { _id: mongoose.isValidObjectId(doctorId) ? doctorId : null }
+        { doctorId: new RegExp(`^${cleanId}$`, 'i') },
+        ...(mongoose.isValidObjectId(cleanId) ? [{ _id: cleanId }] : [])
       ]
     });
     if (!doctor) return res.status(404).json({ message: 'Doctor not found.' });

@@ -14,3 +14,4 @@ const vaultNodeSchema = new mongoose.Schema(
 );
 
 export default mongoose.models.VaultNode || mongoose.model('VaultNode', vaultNodeSchema);
+

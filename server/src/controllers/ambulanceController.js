@@ -11,7 +11,7 @@ export async function getAmbulanceRequests(req, res, next) {
 
 export async function createAmbulanceRequest(req, res, next) {
   try {
-    const patientId = req.user ? req.user.patientId : 'HALO-P-10294';
+    const patientId = req.body.patientId || req.user?.patientId || (req.user?.role === 'PATIENT' ? req.user.id : null);
     const request = await ambulanceService.createAmbulanceRequest(req.body, patientId);
     res.status(201).json(request);
   } catch (err) {

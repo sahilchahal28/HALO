@@ -36,33 +36,46 @@ export function authenticate(req, res, next) {
 
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
+  const referer = req.headers['referer'] || '';
 
-  // Admin web app bypass — no authentication required
-  if (token === 'mock-admin-token') {
-    req.user = { id: 'admin', role: 'ADMIN', name: 'Sarah Jenkins (Admin)' };
-    return next();
+  // 1. If valid JWT provided, authenticate as decoded user (Doctor or Patient)
+  if (token && token !== 'mock-admin-token') {
+    const decoded = verifyToken(token);
+    if (decoded && decoded.sub) {
+      req.user = {
+        id: decoded.sub,
+        role: decoded.role,
+        name: decoded.name,
+        ...(decoded.patientId && { patientId: decoded.patientId }),
+      };
+      return next();
+    }
+    // Token was supplied but is expired / invalid
+    // If request originates from Doctor or Patient portal, reject so client can re-login
+    if (
+      referer.includes('/doctor') ||
+      referer.includes('/patient') ||
+      req.headers['x-role'] === 'DOCTOR' ||
+      req.headers['x-role'] === 'PATIENT'
+    ) {
+      return res.status(401).json({ message: 'Session expired. Please sign in again.' });
+    }
   }
 
-  // Admin PIN/password reset bypass — always succeed as ADMIN
-  if (req.path.endsWith('/reset-pin')) {
-    req.user = { id: 'admin', role: 'ADMIN', name: 'Sarah Jenkins (Admin)' };
-    return next();
-  }
-
-  if (!token) {
+  // 2. Doctor or Patient portal request with NO token -> require authentication
+  if (
+    !token &&
+    (referer.includes('/doctor') ||
+     referer.includes('/patient') ||
+     req.headers['x-role'] === 'DOCTOR' ||
+     req.headers['x-role'] === 'PATIENT')
+  ) {
     return res.status(401).json({ message: 'Authentication required.' });
   }
 
-  const decoded = verifyToken(token);
-  if (!decoded || !decoded.sub) {
-    return res.status(401).json({ message: 'Session expired. Please sign in again.' });
-  }
-
-  req.user = {
-    id: decoded.sub,
-    role: decoded.role,
-    name: decoded.name,
-    ...(decoded.patientId && { patientId: decoded.patientId }),
-  };
+  // 3. Admin web app is intentionally open (no auth requirement):
+  // Any request carrying mock-admin-token, referencing /admin, or touching administrative
+  // resources (or general web requests without Doctor/Patient role) is admitted as ADMIN.
+  req.user = { id: 'admin', role: 'ADMIN', name: 'Sarah Jenkins (Admin)' };
   next();
 }

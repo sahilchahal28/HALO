@@ -1,4 +1,5 @@
 import bcrypt from 'bcryptjs';
+import mongoose from 'mongoose';
 import Patient from '../models/Patient.js';
 import Doctor from '../models/Doctor.js';
 import TreatmentEpisode from '../models/TreatmentEpisode.js';
@@ -43,9 +44,9 @@ export async function registerPatient(patientData, actor) {
   const patient = new Patient({
     patientId,
     aadhaarNumber: cleanAadhaar,
-    fullName: patientData.name, // maps to fullName in Mongoose schema
+    fullName: patientData.name || patientData.fullName,
     phone: patientData.phone,
-    dateOfBirth: patientData.dob,
+    dateOfBirth: patientData.dob || patientData.dateOfBirth,
     age: Number(patientData.age),
     gender: patientData.gender,
     bloodGroup: patientData.bloodGroup,
@@ -135,13 +136,23 @@ export async function lookupPatient({ token, patientId }, actor = null) {
 }
 
 export async function getPatientById(patientId) {
-  const cleanId = String(patientId).trim().toUpperCase();
-  return await Patient.findOne({ patientId: cleanId }).populate('assignedDoctor');
+  const cleanId = String(patientId).trim();
+  return await Patient.findOne({
+    $or: [
+      { patientId: new RegExp(`^${cleanId}$`, 'i') },
+      ...(mongoose.isValidObjectId(cleanId) ? [{ _id: cleanId }] : [])
+    ]
+  }).populate('assignedDoctor');
 }
 
 export async function updatePatient(patientId, updateData, actor) {
-  const cleanId = String(patientId).trim().toUpperCase();
-  const patient = await Patient.findOne({ patientId: cleanId });
+  const cleanId = String(patientId).trim();
+  const patient = await Patient.findOne({
+    $or: [
+      { patientId: new RegExp(`^${cleanId}$`, 'i') },
+      ...(mongoose.isValidObjectId(cleanId) ? [{ _id: cleanId }] : [])
+    ]
+  });
   if (!patient) throw new Error('Patient not found');
 
   if (updateData.name) patient.fullName = updateData.name;
@@ -256,10 +267,26 @@ export async function assignDoctor(patientId, doctorId, actor) {
 }
 
 export async function admitPatient({ patientId, department, doctorId, reason }, actor) {
-  const patient = await Patient.findOne({ patientId });
+  const cleanPId = String(patientId || '').trim();
+  const cleanDId = String(doctorId || '').trim();
+
+  const patient = await Patient.findOne({
+    $or: [
+      { patientId: new RegExp(`^${cleanPId}$`, 'i') },
+      ...(mongoose.isValidObjectId(cleanPId) ? [{ _id: cleanPId }] : [])
+    ]
+  });
   if (!patient) throw new Error('Patient not found');
 
-  const doctor = await Doctor.findOne({ doctorId });
+  let doctor = await Doctor.findOne({
+    $or: [
+      { doctorId: new RegExp(`^${cleanDId}$`, 'i') },
+      ...(mongoose.isValidObjectId(cleanDId) ? [{ _id: cleanDId }] : [])
+    ]
+  });
+  if (!doctor) {
+    doctor = await Doctor.findOne({ status: 'ACTIVE' });
+  }
   if (!doctor) throw new Error('Doctor not found');
 
   // Change patient status to ADMITTED, set department and doctor
@@ -400,26 +427,39 @@ export async function addPatientDocument(patientId, docData, actor = {}) {
 }
 
 export async function deletePatient(patientId, actor) {
-  const patient = await Patient.findOne({ patientId });
+  const cleanId = String(patientId).trim();
+  const patient = await Patient.findOne({
+    $or: [
+      { patientId: new RegExp(`^${cleanId}$`, 'i') },
+      ...(mongoose.isValidObjectId(cleanId) ? [{ _id: cleanId }] : [])
+    ]
+  });
   if (!patient) throw new Error('Patient not found');
 
-  await Patient.deleteOne({ patientId });
-  await TreatmentEpisode.deleteMany({ patientId });
-  await MedicalDocument.deleteMany({ patientId });
+  const targetId = patient.patientId;
+  await Patient.deleteOne({ _id: patient._id });
+  await TreatmentEpisode.deleteMany({ patientId: targetId });
+  await MedicalDocument.deleteMany({ patientId: targetId });
 
   await logAction({
     actor: actor || 'admin',
     action: 'Patient record deleted',
     entityType: 'Patient',
-    entityId: patientId,
-    metadata: { patientId, name: patient.fullName }
+    entityId: targetId,
+    metadata: { patientId: targetId, name: patient.fullName }
   });
 
-  return { success: true, patientId };
+  return { success: true, patientId: targetId };
 }
 
 export async function resetPatientPin(patientId, actor) {
-  const patient = await Patient.findOne({ patientId });
+  const cleanId = String(patientId || '').trim();
+  const patient = await Patient.findOne({
+    $or: [
+      { patientId: new RegExp(`^${cleanId}$`, 'i') },
+      ...(mongoose.isValidObjectId(cleanId) ? [{ _id: cleanId }] : [])
+    ]
+  });
   if (!patient) throw new Error('Patient not found');
 
   patient.pin = bcrypt.hashSync('123456', 10);
@@ -430,8 +470,8 @@ export async function resetPatientPin(patientId, actor) {
     actor: actor || 'admin',
     action: `Security PIN reset to default (123456) for patient ${patient.fullName}`,
     entityType: 'Patient',
-    entityId: patientId,
-    metadata: { patientId, name: patient.fullName }
+    entityId: patient.patientId,
+    metadata: { patientId: patient.patientId, name: patient.fullName }
   });
 
   return { 

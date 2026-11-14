@@ -4,7 +4,7 @@ const NotificationSchema = new mongoose.Schema({
   notificationId: { type: String, required: true, unique: true },
   recipientType: { type: String, enum: ['DOCTOR', 'PATIENT', 'ADMIN'], required: true },
   recipientId: { type: String, required: true },
-  type: { type: String, enum: ['AMBULANCE', 'CRITICAL', 'ICU_ADMIT', 'LAB_RESULT', 'SURGERY_SCHEDULED', 'PATIENT_MESSAGE', 'BED_ASSIGNED', 'BLOOD_ALERT', 'LOW_STOCK'], required: true },
+  type: { type: String, enum: ['AMBULANCE', 'CRITICAL', 'ICU_ADMIT', 'LAB_RESULT', 'SURGERY_SCHEDULED', 'PATIENT_MESSAGE', 'BED_ASSIGNED', 'BLOOD_ALERT', 'LOW_STOCK', 'TRANSFER', 'DISCHARGE', 'GENERAL'], required: true },
   title: { type: String, required: true },
   message: { type: String, required: true },
   relatedEntity: { type: String }, // e.g. TreatmentEpisode, AmbulanceRequest

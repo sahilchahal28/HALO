@@ -262,7 +262,7 @@ export async function listDocuments({
 
   const query = {};
 
-  if (patientId) query.patientId = patientId;
+  if (patientId) query.patientId = new RegExp(`^${patientId}$`, 'i');
   if (category) query.type = category;
   if (department) query.department = department;
   if (doctor) query.$or = [{ doctor }, { doctorId: doctor }];
@@ -315,6 +315,7 @@ export async function listDocuments({
 
   return {
     data: enriched,
+    documents: enriched,
     pagination: {
       total: totalCount,
       page: pageNum,

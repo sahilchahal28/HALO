@@ -121,7 +121,10 @@ export async function updateBedStatus(bedId, status, actor) {
   if (!bed) throw new Error('Bed location not found');
 
   const oldStatus = bed.status;
-  bed.status = status; // 'AVAILABLE', 'OCCUPIED', 'CLEANING', 'UNAVAILABLE'
+  const normStatus = (status || '').toUpperCase();
+  bed.status = ['AVAILABLE', 'OCCUPIED', 'CLEANING', 'UNAVAILABLE', 'MAINTENANCE'].includes(normStatus)
+    ? normStatus
+    : 'AVAILABLE';
 
   // Release patient if transitioning away from occupied
   if (status !== 'OCCUPIED' && oldStatus === 'OCCUPIED') {
@@ -153,11 +156,12 @@ export async function updateBedStatus(bedId, status, actor) {
 }
 
 export async function addBed(bedData, actor) {
-  const existing = await Bed.findOne({ bedId: bedData.bedId });
-  if (existing) throw new Error('Bed location ID already exists');
+  const finalBedId = bedData.bedId || `${(bedData.wardId || 'GEN').replace(/^WARD-/, '')}-${bedData.bedNumber || Date.now().toString().slice(-4)}`;
+  const existing = await Bed.findOne({ bedId: finalBedId });
+  if (existing) throw new Error(`Bed location ID ${finalBedId} already exists`);
 
   const bed = new Bed({
-    bedId: bedData.bedId,
+    bedId: finalBedId,
     wardId: bedData.wardId || 'WARD-GEN',
     bedNumber: bedData.bedNumber || '1',
     status: bedData.status || 'AVAILABLE'

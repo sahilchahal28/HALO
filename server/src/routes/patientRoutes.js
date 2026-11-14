@@ -4,6 +4,7 @@ import * as patientController from '../controllers/patientController.js';
 const router = express.Router();
 
 router.get('/', patientController.getPatients);
+router.post('/', patientController.registerPatient);
 router.post('/register', patientController.registerPatient);
 router.get('/lookup', patientController.lookupPatient);
 router.get('/:patientId', patientController.getPatientById);

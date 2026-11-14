@@ -10,11 +10,11 @@ const InventoryItemSchema = new mongoose.Schema({
   itemId: { type: String, required: true, unique: true },
   name: { type: String, required: true },
   SKU: { type: String, required: true },
-  category: { type: String, enum: ['MEDICINE', 'CONSUMABLE', 'SURGICAL', 'LAB', 'EMERGENCY', 'EQUIPMENT'], required: true },
+  category: { type: String, default: 'MEDICINE' },
   unit: { type: String, required: true }, // e.g. tablets, vials, boxes
   quantity: { type: Number, default: 0 },
   minimumStock: { type: Number, default: 10 },
-  location: { type: String, enum: ['PHARMACY', 'ICU', 'OT', 'EMERGENCY', 'GENERAL'], required: true },
+  location: { type: String, default: 'PHARMACY' },
   supplier: { type: String },
   batches: [BatchSchema]
 }, { 

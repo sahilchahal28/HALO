@@ -12,7 +12,7 @@ const AmbulanceRequestSchema = new mongoose.Schema({
   driverName: { type: String },
   driverPhone: { type: String },
   plateNumber: { type: String },
-  status: { type: String, enum: ['REQUESTED', 'ASSIGNED', 'EN_ROUTE', 'ARRIVED', 'COMPLETED', 'CANCELLED'], default: 'REQUESTED' },
+  status: { type: String, enum: ['REQUESTED', 'ASSIGNED', 'EN_ROUTE', 'ARRIVED', 'COMPLETED', 'CANCELLED', 'DISPATCHED'], default: 'REQUESTED' },
   requestedAt: { type: Date, default: Date.now },
   assignedAt: { type: Date },
   arrivedAt: { type: Date },

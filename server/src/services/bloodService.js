@@ -79,9 +79,10 @@ export async function updateBloodStock(bloodGroup, actionType, actor) {
   if (!inventory) throw new Error('Blood inventory record not found');
 
   const oldUnits = inventory.unitsAvailable;
-  if (actionType === 'INCREMENT') {
+  const normAction = (actionType || '').toUpperCase();
+  if (normAction === 'INCREMENT' || normAction === 'ADD') {
     inventory.unitsAvailable += 1;
-  } else if (actionType === 'DECREMENT') {
+  } else if (normAction === 'DECREMENT' || normAction === 'USE' || normAction === 'DEDUCT') {
     if (inventory.unitsAvailable <= 0) {
       throw new Error('Cannot reduce blood units below zero');
     }

@@ -4,7 +4,7 @@ const BedSchema = new mongoose.Schema({
   bedId: { type: String, required: true, unique: true }, // e.g. ICU-01
   wardId: { type: String, required: true },
   bedNumber: { type: String, required: true },
-  status: { type: String, enum: ['AVAILABLE', 'OCCUPIED', 'CLEANING', 'UNAVAILABLE'], default: 'AVAILABLE' },
+  status: { type: String, enum: ['AVAILABLE', 'OCCUPIED', 'CLEANING', 'UNAVAILABLE', 'MAINTENANCE'], default: 'AVAILABLE' },
   patientId: { type: String },
   patientName: { type: String },
   episodeId: { type: String },

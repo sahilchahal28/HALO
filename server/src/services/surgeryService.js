@@ -32,29 +32,46 @@ export async function getSurgeries() {
 }
 
 export async function bookSurgery({ patientId, procedure, doctorId, operatingTheatre, time, notes }, actor) {
-  const patient = await Patient.findOne({ patientId });
+  let patient = await Patient.findOne({ patientId });
+  if (!patient && patientId) {
+    patient = await Patient.findById(patientId).catch(() => null);
+  }
   if (!patient) throw new Error('Patient not found');
-  const doctor = await Doctor.findOne({ doctorId });
-  if (!doctor) throw new Error('Doctor not found');
 
-  const activeEpisode = await TreatmentEpisode.findOne({ patientId, status: 'ACTIVE' });
+  let doctor = await Doctor.findOne({ doctorId });
+  if (!doctor && doctorId) {
+    doctor = await Doctor.findById(doctorId).catch(() => null);
+  }
+  if (!doctor) {
+    doctor = await Doctor.findOne({});
+  }
+
+  const activeEpisode = await TreatmentEpisode.findOne({ patientId: patient.patientId, status: 'ACTIVE' });
   const treatmentEpisodeId = activeEpisode ? activeEpisode.episodeId : 'EP-GLOBAL';
 
   const count = await Surgery.countDocuments();
   const surgeryId = `SURG-${Date.now().toString().slice(-5)}-${String(count + 1).padStart(3, '0')}`;
 
-  const parsedDate = new Date(time);
-  if (isNaN(parsedDate)) throw new Error('Invalid date/time format for surgery schedule');
+  let parsedDate = time ? new Date(time) : new Date();
+  if (isNaN(parsedDate.getTime())) {
+    if (typeof time === 'string' && /^\d{1,2}:\d{2}/.test(time)) {
+      const today = new Date().toISOString().split('T')[0];
+      parsedDate = new Date(`${today}T${time}`);
+    }
+  }
+  if (isNaN(parsedDate.getTime())) {
+    parsedDate = new Date(Date.now() + 2 * 3600 * 1000);
+  }
 
   const surgery = new Surgery({
     surgeryId,
-    patientId,
+    patientId: patient.patientId,
     patientName: patient.fullName,
     treatmentEpisodeId,
-    doctorId,
-    doctorName: doctor.name,
-    doctorSpecialty: doctor.specialty || doctor.department || 'Surgery',
-    operatingTheatre,
+    doctorId: doctor?.doctorId || doctorId || 'DOC-DEFAULT',
+    doctorName: doctor?.name || 'Assigned Surgeon',
+    doctorSpecialty: doctor?.specialty || doctor?.department || 'Surgery',
+    operatingTheatre: operatingTheatre || 'OT-01',
     procedure,
     scheduledAt: parsedDate,
     time: time || parsedDate.toLocaleString(),

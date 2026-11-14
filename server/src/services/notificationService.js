@@ -1,8 +1,12 @@
 import Notification from '../models/Notification.js';
 
 export async function getDoctorNotifications(doctorId) {
+  const isTargetAdmin = String(doctorId || '').toLowerCase() === 'admin';
   return await Notification.find({
-    recipientId: doctorId,
+    $or: [
+      { recipientId: doctorId },
+      ...(isTargetAdmin ? [{ recipientType: 'ADMIN' }, { recipientId: 'ADMIN' }] : [])
+    ],
     status: { $ne: 'ARCHIVED' }
   }).sort({ createdAt: -1 });
 }

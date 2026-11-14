@@ -9,7 +9,7 @@ import { logAction } from './auditService.js';
 
 export async function getEpisodes(patientId) {
   const query = {};
-  if (patientId) query.patientId = patientId;
+  if (patientId) query.patientId = new RegExp(`^${patientId}$`, 'i');
   return await TreatmentEpisode.find(query);
 }
 

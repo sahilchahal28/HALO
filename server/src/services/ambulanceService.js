@@ -11,8 +11,18 @@ export async function getAmbulanceRequests() {
 }
 
 export async function createAmbulanceRequest(requestData, patientId) {
-  const patient = await Patient.findOne({ patientId });
-  if (!patient) throw new Error('Patient not found');
+  let patient = null;
+  if (patientId) {
+    patient = await Patient.findOne({
+      $or: [
+        { patientId },
+        { phone: requestData.phone || requestData.contactPhone }
+      ]
+    });
+  }
+
+  const patientName = patient?.fullName || requestData.patientName || 'Emergency Patient';
+  const effectivePatientId = patient?.patientId || patientId || 'EMERGENCY';
 
   const count = await AmbulanceRequest.countDocuments();
   const requestId = `AMB-${10000 + count}`;
@@ -24,11 +34,11 @@ export async function createAmbulanceRequest(requestData, patientId) {
 
   const request = new AmbulanceRequest({
     requestId,
-    patientId,
-    patientName: patient.fullName,
-    condition: requestData.condition,
-    location: requestData.location,
-    contact: requestData.phone,
+    patientId: effectivePatientId,
+    patientName,
+    condition: requestData.condition || requestData.symptoms || 'Emergency medical attention required',
+    location: requestData.location || requestData.pickupAddress || 'Address on file',
+    contact: requestData.phone || requestData.contactPhone || '112',
     assignedDoctorId,
     assignedDoctorName,
     status: 'REQUESTED'
@@ -63,10 +73,10 @@ export async function createAmbulanceRequest(requestData, patientId) {
       recipientId: doc.doctorId,
       type: 'AMBULANCE',
       title: 'Emergency: Ambulance Dispatch Requested',
-      message: `${patient.fullName} has requested ambulance dispatch. Location: ${requestData.location}. Symptoms: ${requestData.condition}.`,
+      message: `${patientName} has requested ambulance dispatch. Location: ${requestData.location}. Symptoms: ${requestData.condition}.`,
       relatedEntity: 'AmbulanceRequest',
       relatedEntityId: requestId,
-      patientId
+      patientId: effectivePatientId
     });
   }
 
@@ -157,13 +167,13 @@ export async function getAmbulanceVehicles() {
 
 export async function addAmbulanceVehicle(vehicleData, actor) {
   const count = await Ambulance.countDocuments();
-  const ambulanceId = `AMB-${100 + count}`;
+  const ambulanceId = vehicleData.ambulanceId || `AMB-${100 + count}`;
 
   const vehicle = new Ambulance({
     ambulanceId,
-    plateNumber: vehicleData.plateNumber,
-    driverName: vehicleData.driverName,
-    driverPhone: vehicleData.driverPhone,
+    plateNumber: vehicleData.plateNumber || vehicleData.vehicleNumber,
+    driverName: vehicleData.driverName || 'Assigned Driver',
+    driverPhone: vehicleData.driverPhone || '+919900000000',
     status: vehicleData.status || 'AVAILABLE'
   });
 
