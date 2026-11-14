@@ -235,24 +235,26 @@ async function main() {
   console.log('================================================================');
   console.log('  Keep this terminal window open. Press Ctrl+C to stop.\n');
 
-  // Auto-reconnect watchdog
-  tunnel.on('close', async () => {
-    console.warn('\n[Tunnel] Connection closed. Reconnecting in 3 seconds...');
-    setTimeout(async () => {
-      try {
-        tunnel = await startTunnel(DEFAULT_SUBDOMAIN);
-        console.log(`[Tunnel] Reconnected at: ${tunnel.url}`);
-        await sendVaultHeartbeat('ONLINE', tunnel.url);
-        console.log(`[Tunnel] New Remote Doctor URL: ${FRONTEND_HOST}/doctor?server=${encodeURIComponent(tunnel.url)}`);
-      } catch (e) {
-        console.error('[Tunnel] Reconnect failed:', e.message);
-      }
-    }, 3000);
-  });
+  // Auto-reconnect watchdog (for EventEmitter tunnel providers like localtunnel)
+  if (typeof tunnel.on === 'function') {
+    tunnel.on('close', async () => {
+      console.warn('\n[Tunnel] Connection closed. Reconnecting in 3 seconds...');
+      setTimeout(async () => {
+        try {
+          tunnel = await startTunnel(DEFAULT_SUBDOMAIN);
+          console.log(`[Tunnel] Reconnected at: ${tunnel.url}`);
+          await sendVaultHeartbeat('ONLINE', tunnel.url);
+          console.log(`[Tunnel] New Remote Doctor URL: ${FRONTEND_HOST}/doctor?server=${encodeURIComponent(tunnel.url)}`);
+        } catch (e) {
+          console.error('[Tunnel] Reconnect failed:', e.message);
+        }
+      }, 3000);
+    });
 
-  tunnel.on('error', (err) => {
-    console.error('[Tunnel Error]:', err.message);
-  });
+    tunnel.on('error', (err) => {
+      console.error('[Tunnel Error]:', err.message);
+    });
+  }
 
   // Self-healing watchdog: the tunnel can go half-dead (accepts connections
   // but can't proxy). Probe the public URL and restart the tunnel if it fails.
