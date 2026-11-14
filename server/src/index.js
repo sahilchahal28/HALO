@@ -26,8 +26,12 @@ function getLanIp() {
 // like Railway where Atlas is reached over the public internet).
 try {
   await connectDB();
-  // Start the background data retention auto-deletion worker (runs every 24h)
-  startRetentionWorker();
+  // Start the background data retention auto-deletion worker (runs every 24h) if enabled
+  if (process.env.ENABLE_OBJECT_STORAGE_WORKER === 'true') {
+    startRetentionWorker();
+  } else {
+    console.log('[Retention Worker] Object storage background worker disabled.');
+  }
 } catch (err) {
   console.error('[HALO Server] Database connection failed:', err.message);
   process.exit(1);
