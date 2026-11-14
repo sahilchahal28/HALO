@@ -52,9 +52,17 @@ export function canAccessPatient({ actor, patient, assignedDoctor = null }) {
       );
     }
 
-    case 'DOCTOR':
-      if (!assignedDoctor) return false;
-      return normalize(assignedDoctor.doctorId) === normalize(actor.id);
+    case 'DOCTOR': {
+      const docId = normalize(actor.id);
+      if (assignedDoctor && normalize(assignedDoctor.doctorId) === docId) {
+        return true;
+      }
+      if (patient.assignedDoctor && normalize(patient.assignedDoctor.doctorId || patient.assignedDoctor) === docId) {
+        return true;
+      }
+      const scannedList = (patient.scannedDoctorIds || []).map(normalize);
+      return scannedList.includes(docId);
+    }
 
     default:
       return false;
@@ -91,9 +99,6 @@ export async function assertPatientAccess(actor, patientId, { patient: preloaded
       await patient.populate('assignedDoctor');
       assignedDoctor = patient.assignedDoctor;
     }
-    if (!assignedDoctor) {
-      throw httpError(403, 'Forbidden: This patient has no doctor assigned.');
-    }
   }
 
   if (canAccessPatient({ actor, patient, assignedDoctor })) {
@@ -103,7 +108,10 @@ export async function assertPatientAccess(actor, patientId, { patient: preloaded
   if (actor.role === 'PATIENT') {
     throw httpError(403, 'Unauthorized: You can only access your own medical records.');
   }
-  throw httpError(403, 'Forbidden: You are not the assigned doctor for this patient.');
+  if (actor.role === 'DOCTOR') {
+    throw httpError(403, 'Forbidden: You have not scanned this patient\'s QR pass or been authorized for access.');
+  }
+  throw httpError(403, 'Forbidden: Access denied.');
 }
 
 /**

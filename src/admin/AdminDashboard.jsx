@@ -128,10 +128,15 @@ function PatientConsoleQRBlock({ patient, onZoom }) {
 
 export default function AdminDashboard() {
   const {
-    logout, t, beds, setBeds, patients, setPatients, ambulanceRequests,
+    login, logout, t, beds, setBeds, patients, setPatients, ambulanceRequests,
     bloodBank, setBloodBank, inventory, setInventory, surgeries, setSurgeries, addToast, refreshData, departments,
     ambulanceVehicles, setAmbulanceVehicles, doctors, setDoctors, wasOfflineRef, donorsList, setDonorsList
   } = useApp();
+
+  // Ensure Admin session is always active
+  useEffect(() => {
+    login('ADMIN').catch(() => {});
+  }, []);
 
   const [newVehForm, setNewVehForm] = useState({ plateNumber: '', driverName: '', driverPhone: '' });
   const [dispatchVehicles, setDispatchVehicles] = useState({});

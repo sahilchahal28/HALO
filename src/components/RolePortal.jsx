@@ -4,7 +4,7 @@ import { useApp } from '../context/AppContext';
 import { ShieldAlert, Stethoscope, UserRound, Activity } from 'lucide-react';
 
 export default function RolePortal() {
-  const { language, setLanguage, t } = useApp();
+  const { language, setLanguage, t, login } = useApp();
   const navigate = useNavigate();
 
   return (
@@ -54,7 +54,10 @@ export default function RolePortal() {
 
             {/* ADMIN CARD */}
             <button
-              onClick={() => navigate('/admin')}
+              onClick={() => {
+                login('ADMIN').catch(() => {});
+                navigate('/admin');
+              }}
               className="bg-canvas border border-hairline hover:border-hairline-strong p-8 rounded-lg text-left transition-all duration-200 group flex flex-col justify-between h-72 cursor-pointer"
               style={{ borderRadius: '18px' }} // rounded.lg
             >

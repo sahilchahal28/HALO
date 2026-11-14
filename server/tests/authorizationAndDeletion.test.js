@@ -27,13 +27,24 @@ describe('Document Access Control — assignment-enforced', () => {
     assert.strictEqual(canAccessPatient({ actor: rogue, patient: patientA, assignedDoctor: null }), false);
   });
 
-  test('DOCTOR can access ONLY the patient they are assigned to', () => {
+  test('DOCTOR can access ONLY the patient they are assigned to or have scanned QR for', () => {
     const assignedDoctor = { id: 'HALO-DOC-AI-8888', role: 'DOCTOR' };
     const unassignedDoctor = { id: 'HALO-DOC-XYZ', role: 'DOCTOR' };
+    const scannedDoctor = { id: 'HALO-DOC-SCANNED', role: 'DOCTOR' };
+    const patientWithScanned = {
+      patientId: 'HALO-PAT-3001',
+      assignedDoctor: { doctorId: 'HALO-DOC-PRIMARY' },
+      scannedDoctorIds: ['HALO-DOC-SCANNED']
+    };
 
     // Assigned doctor — sees their patient
     assert.strictEqual(
       canAccessPatient({ actor: assignedDoctor, patient: patientA, assignedDoctor: patientA.assignedDoctor }),
+      true
+    );
+    // Doctor who scanned patient's QR code — can access
+    assert.strictEqual(
+      canAccessPatient({ actor: scannedDoctor, patient: patientWithScanned, assignedDoctor: patientWithScanned.assignedDoctor }),
       true
     );
     // Same doctor — cannot see a different patient
@@ -41,12 +52,12 @@ describe('Document Access Control — assignment-enforced', () => {
       canAccessPatient({ actor: assignedDoctor, patient: patientB, assignedDoctor: patientB.assignedDoctor }),
       false
     );
-    // Same doctor — cannot see a patient with no assigned doctor
+    // Same doctor — cannot see a patient with no assigned doctor and no QR scan
     assert.strictEqual(
       canAccessPatient({ actor: assignedDoctor, patient: patientUnassigned, assignedDoctor: null }),
       false
     );
-    // Unassigned doctor — cannot see either patient
+    // Unassigned doctor who never scanned QR — cannot see patient
     assert.strictEqual(
       canAccessPatient({ actor: unassignedDoctor, patient: patientA, assignedDoctor: patientA.assignedDoctor }),
       false

@@ -31,6 +31,7 @@ const PatientSchema = new mongoose.Schema({
   department: { type: String, default: 'General Medicine' },
   status: { type: String, enum: ['ACTIVE', 'INACTIVE', 'ADMITTED'], default: 'ACTIVE' },
   assignedDoctor: { type: mongoose.Schema.Types.ObjectId, ref: 'Doctor' },
+  scannedDoctorIds: { type: [String], default: [] }, // List of Doctor IDs authorized by QR scan
   currentBed: { type: String },
   qrCodeToken: { type: String, required: true, unique: true },
   pin: { type: String, default: null }, // Bcrypt hash of 6-digit PIN; null defaults to '123456'

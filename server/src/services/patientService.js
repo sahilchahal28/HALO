@@ -202,6 +202,12 @@ export async function assignDoctor(patientId, doctorId, actor) {
   if (!doctor) throw new Error('Doctor not found');
 
   patient.assignedDoctor = doctor._id;
+  if (!patient.scannedDoctorIds) {
+    patient.scannedDoctorIds = [];
+  }
+  if (!patient.scannedDoctorIds.includes(doctor.doctorId)) {
+    patient.scannedDoctorIds.push(doctor.doctorId);
+  }
   if (patient.status === 'INACTIVE') {
     patient.status = 'ACTIVE';
   }
