@@ -532,8 +532,9 @@ export function AppProvider({ children }) {
     if (!token) return;
     const socket = createSocket(token);
 
-    // Bind HALOArchive for real-time document synchronization across PWAs
-    HALOArchive.bindSocket(socket, user?.role, user?.patientId || user?.id);
+    // Bind HALOArchive for real-time document synchronization across PWAs (patient-only for room sub)
+    const activePatientId = user?.role === 'PATIENT' ? (user?.patientId || user?.id) : null;
+    HALOArchive.bindSocket(socket, user?.role, activePatientId);
 
     socket.on('sync', () => {
       clearTimeout(syncDebounceRef.current);

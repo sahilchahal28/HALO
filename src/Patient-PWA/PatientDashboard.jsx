@@ -97,7 +97,19 @@ export default function PatientDashboard() {
   // Native PWA Installation & Standalone State
   const [deferredPrompt, setDeferredPrompt] = useState(null);
   const [isStandalone, setIsStandalone] = useState(false);
-  const [devBypass, setDevBypass] = useState(false);
+  const [devBypass, setDevBypassState] = useState(() => {
+    try {
+      const stored = localStorage.getItem('halo_dev_bypass');
+      if (stored !== null) return stored === 'true';
+      return true; // Default allow browser access so users never get blocked by a wall
+    } catch (_) {
+      return true;
+    }
+  });
+  const setDevBypass = (val) => {
+    setDevBypassState(val);
+    try { localStorage.setItem('halo_dev_bypass', String(val)); } catch (_) {}
+  };
 
   // Patient Document Upload & Management State
   const [showUploadModal, setShowUploadModal] = useState(false);
@@ -306,6 +318,27 @@ export default function PatientDashboard() {
             </div>
             <h2 className="text-xl font-bold text-ink">Patient Health Portal</h2>
             <p className="text-xs text-ink-muted-48">Sign in with your registered mobile, Patient ID & security PIN.</p>
+            {/* Quick Demo Fills */}
+            <div className="flex gap-2 justify-center flex-wrap pt-1">
+              <button
+                type="button"
+                onClick={() => {
+                  setLoginForm({ phone: '9876543210', id: 'HALO-PAT-OC-8934', pin: '123456' });
+                }}
+                className="text-[10px] bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20 px-2.5 py-1 rounded-full font-semibold transition-colors cursor-pointer"
+              >
+                Demo: Keshav (Outpatient)
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setLoginForm({ phone: '9876543210', id: 'HALO-PAT-RS-1029', pin: '123456' });
+                }}
+                className="text-[10px] bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20 px-2.5 py-1 rounded-full font-semibold transition-colors cursor-pointer"
+              >
+                Demo: Rahul Sharma
+              </button>
+            </div>
           </div>
 
           <form onSubmit={handleLoginSubmit} className="space-y-4">

@@ -24,7 +24,6 @@ dist-ssr
 *.sw?
 .env
 
-# Local medical-record storage (device-local files — never commit patient data)
-server/storage/**
-!server/storage/**/.gitkeep
+# Local medical-record storage (seed/sample demo records committed for Railway cloud deployment)
+server/storage/tmp/**
 server/.mock-s3/

@@ -99,7 +99,19 @@ export default function DoctorDashboard() {
   // Native PWA Installation & Standalone State
   const [deferredPrompt, setDeferredPrompt] = useState(null);
   const [isStandalone, setIsStandalone] = useState(false);
-  const [devBypass, setDevBypass] = useState(false);
+  const [devBypass, setDevBypassState] = useState(() => {
+    try {
+      const stored = localStorage.getItem('halo_dev_bypass');
+      if (stored !== null) return stored === 'true';
+      return true; // Default allow browser access so users never get blocked by a wall
+    } catch (_) {
+      return true;
+    }
+  });
+  const setDevBypass = (val) => {
+    setDevBypassState(val);
+    try { localStorage.setItem('halo_dev_bypass', String(val)); } catch (_) {}
+  };
 
   useEffect(() => {
     const standaloneMode = 
@@ -521,6 +533,16 @@ export default function DoctorDashboard() {
             </div>
             <h2 className="text-xl font-bold text-ink">Clinical Access Portal</h2>
             <p className="text-xs text-ink-muted-48">Sign in with your registered mobile, Doctor ID & security PIN.</p>
+            {/* Quick Demo Fill */}
+            <button
+              type="button"
+              onClick={() => {
+                setLoginForm({ phone: '9900005005', id: 'HALO-DOC-EO-4330', pin: '123456' });
+              }}
+              className="mt-1 text-[11px] bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20 px-3 py-1 rounded-full font-semibold transition-colors cursor-pointer"
+            >
+              Demo Fill: Dr. Rohan Desai (Pediatrics)
+            </button>
           </div>
 
           <form onSubmit={handleLoginSubmit} className="space-y-4">
