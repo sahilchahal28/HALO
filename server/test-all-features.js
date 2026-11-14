@@ -1,4 +1,4 @@
-const BASE = 'http://127.0.0.1:5001/api';
+const BASE = process.env.BASE || 'http://127.0.0.1:5001/api';
 
 async function req(endpoint, options = {}) {
   const url = `${BASE}${endpoint}`;
