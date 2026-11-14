@@ -353,26 +353,29 @@ async function rawRequest(endpoint, options = {}, isRetry = false) {
   }
 
   // If a document request (like /documents/upload or /documents/sync-delta) returned 404,
-  // fallback to the active Railway backend where the physical storage lives.
+  // check if the host Mac Device Vault is online via tunnel where the physical disk storage lives.
   if (response.status === 404 && endpoint.startsWith('/documents') && !isRetry) {
-    const archiveBase = 'https://halo-production-8760181f.up.railway.app';
-    if (base !== archiveBase) {
-      try {
-        const archiveRes = await fetch(`${archiveBase}/api${endpoint}`, {
-          ...options,
-          body,
-          headers: {
-            ...headers,
-            'bypass-tunnel-reminder': 'true',
-          },
-          credentials: 'include',
-        });
-        if (archiveRes.ok) {
-          if (archiveRes.status === 204) return null;
-          return archiveRes.json();
+    try {
+      const statusRes = await fetch(`${base}/api/vault/status`).catch(() => null);
+      if (statusRes && statusRes.ok) {
+        const vaultInfo = await statusRes.json();
+        if (vaultInfo.online && vaultInfo.tunnelUrl && vaultInfo.tunnelUrl !== base) {
+          const tunnelRes = await fetch(`${vaultInfo.tunnelUrl}/api${endpoint}`, {
+            ...options,
+            body,
+            headers: {
+              ...headers,
+              'bypass-tunnel-reminder': 'true',
+            },
+            credentials: 'include',
+          });
+          if (tunnelRes.ok) {
+            if (tunnelRes.status === 204) return null;
+            return tunnelRes.json();
+          }
         }
-      } catch (_) {}
-    }
+      }
+    } catch (_) {}
   }
 
   const isTransientFinal = TRANSIENT_STATUSES.has(response.status);

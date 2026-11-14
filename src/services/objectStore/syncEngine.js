@@ -21,6 +21,7 @@ import { api, getApiBase } from '../../utils/api.js';
 let _activeSocket = null;
 let _currentSubscribedPatientId = null;
 let _currentRole = 'DOCTOR';
+let _vaultStatusCache = { online: false, checkedAt: 0 };
 
 function getAuthToken() {
   try {
@@ -44,6 +45,33 @@ if (typeof window !== 'undefined') {
 }
 
 export const HALOArchive = {
+  /**
+   * Check whether the host Mac disk storage vault is online via tunnel.
+   */
+  async checkVaultStatus() {
+    if (Date.now() - _vaultStatusCache.checkedAt < 5000) {
+      return _vaultStatusCache;
+    }
+    try {
+      const res = await api.get('/vault/status');
+      _vaultStatusCache = {
+        online: Boolean(res?.online),
+        tunnelUrl: res?.tunnelUrl || null,
+        message: res?.message || '',
+        checkedAt: Date.now(),
+      };
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent('halo:vault:status', { detail: _vaultStatusCache })
+        );
+      }
+      return _vaultStatusCache;
+    } catch (_) {
+      _vaultStatusCache = { online: false, checkedAt: Date.now() };
+      return _vaultStatusCache;
+    }
+  },
+
   /**
    * Bind the active Socket.io instance for real-time document events.
    *
@@ -186,6 +214,13 @@ export const HALOArchive = {
 
     if (role !== 'ADMIN' && !patientId) {
       console.warn('[HALOArchive] syncDelta skipped: patientId is required.');
+      return [];
+    }
+
+    // Gate remote delta sync: only sync with disk storage when npm run tunnel is running!
+    const vault = await this.checkVaultStatus();
+    if (!vault.online) {
+      console.log('[HALOArchive] Mac Device Storage Vault is offline. Run "npm run tunnel" on terminal to sync documents.');
       return [];
     }
 
@@ -361,7 +396,8 @@ export const HALOArchive = {
     }
 
     // 2. Fetch from server's binary stream with timeout and fallback
-    const base = getApiBase();
+    const vault = await this.checkVaultStatus();
+    const base = vault.tunnelUrl || getApiBase();
     const token = getAuthToken();
     const PRODUCTION_BACKEND = 'https://halo-production-8760181f.up.railway.app';
 
@@ -432,6 +468,10 @@ export const HALOArchive = {
           const ensuredBlob = wrapPdfBlobIfNeeded(fallback.blob, fallback.key || fileKey || '');
           return { blob: ensuredBlob, blobUrl: URL.createObjectURL(ensuredBlob), cached: true };
         }
+      }
+
+      if (!vault.online) {
+        throw new Error('This document is stored on your Mac disk. Please run "npm run tunnel" on your Mac terminal to connect disk storage and view.');
       }
 
       throw new Error(

@@ -37,7 +37,20 @@ router.get('/file/:encodedKey', async (req, res) => {
     const filePath = getLocalFilePath(fileKey);
 
     if (!fs.existsSync(filePath)) {
-      return res.status(404).json({ error: 'File not found. It may have been deleted by the retention policy.' });
+      try {
+        const VaultNode = (await import('../models/VaultNode.js')).default;
+        const node = await VaultNode.findOne({ nodeId: 'mac-primary' });
+        const isOnline = node && node.status === 'ONLINE' && node.tunnelUrl && (Date.now() - new Date(node.lastHeartbeat).getTime()) < 45000;
+        if (isOnline) {
+          const queryStr = req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '';
+          return res.redirect(302, `${node.tunnelUrl}/api/documents/file/${req.params.encodedKey}${queryStr}`);
+        }
+      } catch (_) {}
+
+      return res.status(404).json({
+        error: 'File stored on host Mac disk. Run "npm run tunnel" on the host Mac to connect disk storage.',
+        vaultOffline: true,
+      });
     }
 
     // Strict access control: extract patientId from fileKey (e.g. records/HALO-PAT-OC-8934/...)

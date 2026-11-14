@@ -543,8 +543,22 @@ export async function getDocumentBlobStream({ documentId, actor, actorRole }) {
   const filePath = getLocalFilePath(document.s3Key);
   const { exists } = await checkLocalObjectExists({ key: document.s3Key });
   if (!exists) {
-    const err = new Error('File not found on storage — it may have been deleted by the retention policy.');
+    try {
+      const VaultNode = (await import('../models/VaultNode.js')).default;
+      const node = await VaultNode.findOne({ nodeId: 'mac-primary' });
+      const isOnline = node && node.status === 'ONLINE' && node.tunnelUrl && (Date.now() - new Date(node.lastHeartbeat).getTime()) < 45000;
+      if (isOnline) {
+        return {
+          redirectUrl: `${node.tunnelUrl}/api/documents/${documentId}/blob`,
+          filename: document.title,
+          document,
+        };
+      }
+    } catch (_) {}
+
+    const err = new Error('File stored on host Mac disk. Please run "npm run tunnel" on your Mac terminal to connect disk storage and view.');
     err.status = 404;
+    err.vaultOffline = true;
     throw err;
   }
 

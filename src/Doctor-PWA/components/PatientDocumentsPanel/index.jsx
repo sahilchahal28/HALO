@@ -41,6 +41,19 @@ export default function PatientDocumentsPanel({
   const [isSyncing, setIsSyncing] = useState(false);
   const [storageInfo, setStorageInfo] = useState({ count: 0, estimatedBytes: 0, usagePercentage: 0 });
   const [actionLoadingDocId, setActionLoadingDocId] = useState(null);
+  const [vaultStatus, setVaultStatus] = useState({ online: false });
+
+  // Probe Mac Device Storage Vault status
+  useEffect(() => {
+    HALOArchive.checkVaultStatus().then(status => {
+      if (status) setVaultStatus(status);
+    });
+    const handleVaultStatus = (e) => {
+      if (e.detail) setVaultStatus(e.detail);
+    };
+    window.addEventListener('halo:vault:status', handleVaultStatus);
+    return () => window.removeEventListener('halo:vault:status', handleVaultStatus);
+  }, []);
 
   // Sync initialDocuments if they update from parent
   useEffect(() => {
@@ -369,6 +382,23 @@ export default function PatientDocumentsPanel({
         </div>
 
         <div className="flex items-center gap-2 w-full sm:w-auto">
+          {/* Mac Device Storage Vault Status Indicator */}
+          <div
+            className={`flex items-center gap-1.5 text-[11px] px-3 py-1.5 rounded-full border font-medium transition-colors ${
+              vaultStatus.online
+                ? 'bg-emerald-500/10 text-emerald-700 border-emerald-500/20'
+                : 'bg-zinc-500/10 text-zinc-600 border-zinc-500/20'
+            }`}
+            title={
+              vaultStatus.online
+                ? `Mac Disk Space Vault is ONLINE (${vaultStatus.tunnelUrl || 'Active Tunnel'})`
+                : 'Mac Device Storage is offline. Run "npm run tunnel" on your Mac terminal to connect disk storage.'
+            }
+          >
+            <span className={`w-2 h-2 rounded-full ${vaultStatus.online ? 'bg-emerald-500 animate-pulse' : 'bg-zinc-400'}`} />
+            <span>{vaultStatus.online ? 'Mac Disk Online' : 'Mac Disk Offline'}</span>
+          </div>
+
           {/* Storage usage indicator */}
           <div className="hidden lg:flex items-center gap-1.5 text-[11px] text-ink-muted-48 bg-canvas-parchment px-3 py-1.5 rounded-full border border-hairline">
             <HardDrive size={12} className="text-primary" />

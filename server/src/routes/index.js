@@ -10,11 +10,13 @@ import notificationRoutes from './notificationRoutes.js';
 import dashboardRoutes from './dashboardRoutes.js';
 import doctorRoutes from './doctorRoutes.js';
 import documentRoutes from './documentRoutes.js';
+import vaultRoutes from './vaultRoutes.js';
 
 const router = express.Router();
 
 router.use('/patients', patientRoutes);
 router.use('/documents', documentRoutes);
+router.use('/vault', vaultRoutes);
 router.use('/episodes', episodeRoutes);
 router.use('/beds', bedRoutes);
 router.use('/ambulance', ambulanceRoutes);

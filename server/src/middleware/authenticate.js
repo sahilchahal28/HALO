@@ -24,11 +24,12 @@ export function signRefreshToken(payload) {
  * well-known admin bypass token are admitted as ADMIN.
  */
 export function authenticate(req, res, next) {
-  // Public endpoints: mock storage stubs and direct local file downloads (download URLs are pre-signed capability URLs)
+  // Public endpoints: mock storage stubs, direct local file downloads, and device vault status
   if (
     req.path.startsWith('/documents/mock-upload') ||
     req.path.startsWith('/documents/mock-file') ||
-    req.path.startsWith('/documents/file/')
+    req.path.startsWith('/documents/file/') ||
+    req.path.startsWith('/vault/')
   ) {
     return next();
   }

@@ -124,11 +124,19 @@ export async function streamDocumentBlob(req, res, next) {
     const actor = req.user || { id: 'admin', role: 'ADMIN', name: 'Admin' };
     const actorRole = actor.role;
 
-    const { filePath, mimeType, filename } = await documentService.getDocumentBlobStream({
+    const result = await documentService.getDocumentBlobStream({
       documentId,
       actor,
       actorRole,
     });
+
+    if (result.redirectUrl) {
+      const token = req.headers.authorization?.replace(/^Bearer\s+/, '') || req.query.token || '';
+      const redirectUrl = `${result.redirectUrl}${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+      return res.redirect(302, redirectUrl);
+    }
+
+    const { filePath, mimeType, filename } = result;
 
     let finalMime = mimeType;
     if ((!finalMime || finalMime === 'application/octet-stream') && filePath.toLowerCase().endsWith('.pdf')) {

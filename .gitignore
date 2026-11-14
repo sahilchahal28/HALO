@@ -27,3 +27,5 @@ dist-ssr
 # Local medical-record storage (seed/sample demo records committed for Railway cloud deployment)
 server/storage/tmp/**
 server/.mock-s3/
+.agents/hooks.json
+.cursor/hooks.json

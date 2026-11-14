@@ -57,7 +57,7 @@ async function ensureServerRunning() {
   console.log(`[HALO Server] Starting local backend server on port ${PORT}...`);
   const child = spawn('node', ['server/src/index.js'], {
     stdio: 'inherit',
-    env: { ...process.env, PORT: String(PORT) },
+    env: { ...process.env, PORT: String(PORT), ENABLE_OBJECT_STORAGE_WORKER: 'true' },
   });
 
   // Wait for server to become healthy
@@ -161,12 +161,56 @@ function checkTunnelHealth(publicUrl) {
   });
 }
 
+function sendVaultHeartbeat(status = 'ONLINE', publicTunnelUrl = '') {
+  return new Promise((resolve) => {
+    try {
+      const lanIp = getLanIp();
+      const payload = JSON.stringify({
+        status,
+        tunnelUrl: publicTunnelUrl,
+        lanUrl: `http://${lanIp}:${PORT}`,
+        localUrl: `http://127.0.0.1:${PORT}`,
+      });
+      const req = http.request(
+        `http://127.0.0.1:${PORT}/api/vault/heartbeat`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Content-Length': Buffer.byteLength(payload),
+          },
+          timeout: 4000,
+        },
+        (res) => {
+          res.resume();
+          resolve(true);
+        }
+      );
+      req.on('error', () => resolve(false));
+      req.on('timeout', () => { req.destroy(); resolve(false); });
+      req.write(payload);
+      req.end();
+    } catch (_) {
+      resolve(false);
+    }
+  });
+}
+
 async function main() {
   const lanIp = getLanIp();
   const serverProc = await ensureServerRunning();
 
   let tunnel = await startTunnel(DEFAULT_SUBDOMAIN);
   const publicUrl = tunnel.url;
+
+  // Register Mac Device Storage Vault as ONLINE in MongoDB
+  await sendVaultHeartbeat('ONLINE', publicUrl);
+  console.log('[Mac Device Vault] Registered status: ONLINE with active tunnel.');
+
+  // Heartbeat watchdog: update MongoDB heartbeat every 15s
+  const heartbeatInterval = setInterval(async () => {
+    await sendVaultHeartbeat('ONLINE', tunnel.url);
+  }, 15000);
 
   // The Vercel frontend proxies /api to this Mac through the tunnel
   // (see the vercel.json rewrite), so phones must use the PLAIN portal URLs
@@ -178,12 +222,13 @@ async function main() {
   const adminTunnelUrl = `${FRONTEND_HOST}/admin?server=${encodeURIComponent(publicUrl)}`;
 
   console.log('\n================================================================');
-  console.log('  STATUS: ONLINE — TUNNEL READY');
+  console.log('  STATUS: ONLINE — MAC DEVICE STORAGE VAULT READY');
   console.log('================================================================');
   console.log(`  • Local Server (This Mac):  http://127.0.0.1:${PORT}`);
   console.log(`  • Local Wi-Fi (LAN IP):     http://${lanIp}:${PORT}`);
   console.log(`  • Public Tunnel Address:    ${publicUrl}`);
   console.log(`  • Mac Storage Directory:    server/storage/users/records/`);
+  console.log(`  • Object Storage (IndexedDB): ACTIVE & SYNCHRONIZING`);
   console.log('----------------------------------------------------------------');
   console.log(`  Direct on Wi-Fi (LAN):      http://${lanIp}:${PORT}/doctor`);
   console.log(`  Remote from anywhere:       ${doctorTunnelUrl}`);
@@ -197,6 +242,7 @@ async function main() {
       try {
         tunnel = await startTunnel(DEFAULT_SUBDOMAIN);
         console.log(`[Tunnel] Reconnected at: ${tunnel.url}`);
+        await sendVaultHeartbeat('ONLINE', tunnel.url);
         console.log(`[Tunnel] New Remote Doctor URL: ${FRONTEND_HOST}/doctor?server=${encodeURIComponent(tunnel.url)}`);
       } catch (e) {
         console.error('[Tunnel] Reconnect failed:', e.message);
@@ -222,6 +268,7 @@ async function main() {
         await new Promise((r) => setTimeout(r, 2500));
         tunnel = await startTunnel(DEFAULT_SUBDOMAIN);
         console.log(`[Watchdog] Tunnel restarted at: ${tunnel.url}`);
+        await sendVaultHeartbeat('ONLINE', tunnel.url);
         healthy = true;
       } else if (ok && isCorrectSubdomain && !healthy) {
         healthy = true;
@@ -232,12 +279,17 @@ async function main() {
     }
   }, 15000);
 
-  process.on('SIGINT', () => {
-    console.log('\n[HALO Tunnel] Shutting down...');
-    tunnel.close();
+  const shutdown = async () => {
+    console.log('\n[HALO Tunnel] Deregistering Mac Device Storage Vault...');
+    clearInterval(heartbeatInterval);
+    await sendVaultHeartbeat('OFFLINE', '');
+    try { tunnel.close(); } catch (_) {}
     if (serverProc) serverProc.kill();
     process.exit(0);
-  });
+  };
+
+  process.on('SIGINT', shutdown);
+  process.on('SIGTERM', shutdown);
 }
 
 main().catch((err) => {
