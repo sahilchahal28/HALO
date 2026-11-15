@@ -58,7 +58,7 @@ export default function PatientDocumentsPanel({
   // Sync initialDocuments if they update from parent
   useEffect(() => {
     if (initialDocuments && initialDocuments.length > 0) {
-      setDocuments(prev => (prev.length === 0 ? initialDocuments : prev));
+      setDocuments(initialDocuments);
       setIsLoading(false);
     }
   }, [initialDocuments]);
@@ -99,6 +99,14 @@ export default function PatientDocumentsPanel({
         setDocuments(res.items);
       } else if (initialDocuments && initialDocuments.length > 0) {
         setDocuments(initialDocuments);
+      } else {
+        try {
+          const apiDocs = await api.get(`/patients/${patientId}/documents`);
+          const resolved = Array.isArray(apiDocs) ? apiDocs : (apiDocs?.documents || []);
+          if (resolved.length > 0) {
+            setDocuments(resolved);
+          }
+        } catch (_) {}
       }
       const info = await ObjectStore.getStorageInfo();
       setStorageInfo(info);
@@ -106,6 +114,12 @@ export default function PatientDocumentsPanel({
       console.error('[PatientDocumentsPanel] Error loading objects:', err);
       if (initialDocuments && initialDocuments.length > 0) {
         setDocuments(initialDocuments);
+      } else {
+        try {
+          const apiDocs = await api.get(`/patients/${patientId}/documents`);
+          const resolved = Array.isArray(apiDocs) ? apiDocs : (apiDocs?.documents || []);
+          if (resolved.length > 0) setDocuments(resolved);
+        } catch (_) {}
       }
     } finally {
       setIsLoading(false);

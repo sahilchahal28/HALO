@@ -89,7 +89,11 @@ async function startTunnel(requestedSubdomain, attempt = 1) {
             resolvedUrl = match[0];
             resolve({
               url: resolvedUrl,
-              close: () => child.kill()
+              close: () => child.kill(),
+              on: (event, cb) => {
+                if (event === 'close') child.on('close', cb);
+                if (event === 'error') child.on('error', cb);
+              }
             });
           }
         });
@@ -100,7 +104,11 @@ async function startTunnel(requestedSubdomain, attempt = 1) {
             resolvedUrl = match[0];
             resolve({
               url: resolvedUrl,
-              close: () => child.kill()
+              close: () => child.kill(),
+              on: (event, cb) => {
+                if (event === 'close') child.on('close', cb);
+                if (event === 'error') child.on('error', cb);
+              }
             });
           }
         });
@@ -171,7 +179,9 @@ function sendVaultHeartbeat(status = 'ONLINE', publicTunnelUrl = '') {
         lanUrl: `http://${lanIp}:${PORT}`,
         localUrl: `http://127.0.0.1:${PORT}`,
       });
-      const req = http.request(
+
+      // 1. Post to local server
+      const reqLocal = http.request(
         `http://127.0.0.1:${PORT}/api/vault/heartbeat`,
         {
           method: 'POST',
@@ -186,10 +196,30 @@ function sendVaultHeartbeat(status = 'ONLINE', publicTunnelUrl = '') {
           resolve(true);
         }
       );
-      req.on('error', () => resolve(false));
-      req.on('timeout', () => { req.destroy(); resolve(false); });
-      req.write(payload);
-      req.end();
+      reqLocal.on('error', () => resolve(false));
+      reqLocal.on('timeout', () => { reqLocal.destroy(); resolve(false); });
+      reqLocal.write(payload);
+      reqLocal.end();
+
+      // 2. Also notify remote Railway backend so remote clients immediately see the vault is online
+      const railwayReq = https.request(
+        `https://halo-production-8760181f.up.railway.app/api/vault/heartbeat`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Content-Length': Buffer.byteLength(payload),
+          },
+          timeout: 4000,
+        },
+        (res) => {
+          res.resume();
+        }
+      );
+      railwayReq.on('error', () => {});
+      railwayReq.on('timeout', () => railwayReq.destroy());
+      railwayReq.write(payload);
+      railwayReq.end();
     } catch (_) {
       resolve(false);
     }
@@ -257,22 +287,22 @@ async function main() {
   }
 
   // Self-healing watchdog: the tunnel can go half-dead (accepts connections
-  // but can't proxy). Probe the public URL and restart the tunnel if it fails.
+  // but can't proxy). Probe the public URL and restart the tunnel ONLY if it actually fails.
   let healthy = true;
   setInterval(async () => {
     try {
+      if (!tunnel?.url) return;
       const ok = await checkTunnelHealth(tunnel.url);
-      const isCorrectSubdomain = tunnel.url.includes(`${DEFAULT_SUBDOMAIN}.loca.lt`);
-      if ((!ok || !isCorrectSubdomain) && healthy) {
+      if (!ok && healthy) {
         healthy = false;
-        console.warn(`\n[Watchdog] Tunnel not responding or incorrect subdomain (${tunnel.url}). Reconnecting...`);
+        console.warn(`\n[Watchdog] Tunnel not responding (${tunnel.url}). Reconnecting...`);
         try { tunnel.close(); } catch (_) {}
         await new Promise((r) => setTimeout(r, 2500));
         tunnel = await startTunnel(DEFAULT_SUBDOMAIN);
         console.log(`[Watchdog] Tunnel restarted at: ${tunnel.url}`);
         await sendVaultHeartbeat('ONLINE', tunnel.url);
         healthy = true;
-      } else if (ok && isCorrectSubdomain && !healthy) {
+      } else if (ok && !healthy) {
         healthy = true;
         console.log('[Watchdog] Tunnel health recovered.');
       }

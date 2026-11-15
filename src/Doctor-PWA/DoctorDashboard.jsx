@@ -156,13 +156,32 @@ export default function DoctorDashboard() {
     }
   });
 
+  // Local storage session tracker for dismissed patients (removed from active list)
+  const [dismissedPatientIds, setDismissedPatientIds] = useState(() => {
+    try {
+      const saved = localStorage.getItem('halo_doctor_dismissed_patients');
+      return saved ? JSON.parse(saved) : [];
+    } catch (_) {
+      return [];
+    }
+  });
+
   useEffect(() => {
     localStorage.setItem('halo_doctor_active_patients', JSON.stringify(activePatientIds));
   }, [activePatientIds]);
 
+  useEffect(() => {
+    localStorage.setItem('halo_doctor_dismissed_patients', JSON.stringify(dismissedPatientIds));
+  }, [dismissedPatientIds]);
+
   const handleRemoveActivePatient = (patientId, e) => {
-    e.stopPropagation();
+    if (e) e.stopPropagation();
     setActivePatientIds(prev => prev.filter(id => id !== patientId));
+    setDismissedPatientIds(prev => prev.includes(patientId) ? prev : [...prev, patientId]);
+    if (selectedPatient?.patientId === patientId) {
+      setSelectedPatient(null);
+      if (activeTab === 'patientView') setActiveTab('dashboard');
+    }
     addToast('Patient removed from active dashboard.', 'info');
   };
 
@@ -308,6 +327,7 @@ export default function DoctorDashboard() {
   const handlePatientFound = (patient) => {
     if (patient && patient.patientId) {
       const pid = patient.patientId;
+      setDismissedPatientIds(prev => prev.filter(id => id !== pid));
       if (!activePatientIds.includes(pid)) {
         setActivePatientIds(prev => [...prev, pid]);
       }
@@ -472,7 +492,8 @@ export default function DoctorDashboard() {
     return doc.doctorId === myDoctorId || doc._id === user?._id || doc.id === myDoctorId;
   };
   const visiblePatients = (patients || []).filter(pt => 
-    activePatientIds.includes(pt.patientId) || isAssignedToDoctor(pt)
+    !dismissedPatientIds.includes(pt.patientId) &&
+    (activePatientIds.includes(pt.patientId) || isAssignedToDoctor(pt))
   );
 
   // Enforce native app execution
@@ -1009,9 +1030,22 @@ export default function DoctorDashboard() {
         {/* ==================== 3. PATIENTS TAB ==================== */}
         {activeTab === 'patients' && (
           <div className="space-y-6">
-            <div>
-              <h1 className="text-2xl font-semibold text-ink leading-tight tracking-tight">My Patients</h1>
-              <p className="text-xs text-ink-muted-48 uppercase mt-1">All patients added to your care list via QR scan</p>
+            <div className="flex items-center justify-between">
+              <div>
+                <h1 className="text-2xl font-semibold text-ink leading-tight tracking-tight">My Patients</h1>
+                <p className="text-xs text-ink-muted-48 uppercase mt-1">All patients added to your care list via QR scan</p>
+              </div>
+              {dismissedPatientIds.length > 0 && (
+                <button
+                  onClick={() => {
+                    setDismissedPatientIds([]);
+                    addToast('Restored all removed patients to view', 'success');
+                  }}
+                  className="text-[10px] text-primary border border-primary/20 bg-primary/5 px-2.5 py-1 rounded-full hover:bg-primary/10 transition-colors"
+                >
+                  Restore ({dismissedPatientIds.length})
+                </button>
+              )}
             </div>
 
             {visiblePatients.length === 0 ? (

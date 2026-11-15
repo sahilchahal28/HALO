@@ -54,7 +54,7 @@ export default function MyDocumentsPanel({ user, patientEpisode }) {
   const [uploadFile, setUploadFile] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
 
-  // Load from ObjectStore
+  // Load from ObjectStore with server API fallback
   const loadDocuments = useCallback(async () => {
     if (!patientId) return;
     try {
@@ -68,9 +68,39 @@ export default function MyDocumentsPanel({ user, patientEpisode }) {
         limit: 200,
       });
 
-      setDocuments(res.items || []);
+      if (res.items && res.items.length > 0) {
+        setDocuments(res.items);
+      } else {
+        // Fallback to REST API if IndexedDB has no items yet
+        try {
+          const serverDocs = await api.get(`/patients/${patientId}/documents`);
+          const resolvedDocs = Array.isArray(serverDocs) ? serverDocs : (serverDocs?.documents || []);
+          if (resolvedDocs.length > 0) {
+            setDocuments(resolvedDocs.map(d => ({
+              ...d,
+              fileKey: d.fileKey || d.s3Key,
+              documentId: d.documentId || d._id,
+              uploadedAt: d.createdAt || d.uploadedAt || d.date,
+            })));
+          } else {
+            setDocuments([]);
+          }
+        } catch (_) {
+          setDocuments([]);
+        }
+      }
     } catch (err) {
       console.error('[MyDocumentsPanel] Error querying ObjectStore:', err);
+      try {
+        const serverDocs = await api.get(`/patients/${patientId}/documents`);
+        const resolvedDocs = Array.isArray(serverDocs) ? serverDocs : (serverDocs?.documents || []);
+        setDocuments(resolvedDocs.map(d => ({
+          ...d,
+          fileKey: d.fileKey || d.s3Key,
+          documentId: d.documentId || d._id,
+          uploadedAt: d.createdAt || d.uploadedAt || d.date,
+        })));
+      } catch (_) {}
     } finally {
       setIsLoading(false);
     }
