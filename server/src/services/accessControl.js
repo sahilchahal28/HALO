@@ -15,6 +15,7 @@
  * and a patient can only ever see their own.
  */
 import Patient from '../models/Patient.js';
+import Doctor from '../models/Doctor.js';
 
 function normalize(id) {
   return String(id || '').trim().toUpperCase();

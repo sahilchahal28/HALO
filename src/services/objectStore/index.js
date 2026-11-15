@@ -290,12 +290,16 @@ export const ObjectStore = {
     const records = await withTransaction(db, [STORES.OBJECTS], 'readonly', async (tx) => {
       const store = tx.objectStore(STORES.OBJECTS);
 
-      // Fast-path index lookup by patientId if available
+      // Fast-path index lookup by patientId if available with case-insensitive fallback
       let allForPatient = [];
       if (patientId) {
         const index = store.index('patientId');
         const targetId = String(patientId).trim().toUpperCase();
         allForPatient = await getAll(index, targetId);
+        if (!allForPatient || allForPatient.length === 0) {
+          const allDocs = await getAll(store);
+          allForPatient = (allDocs || []).filter(r => r.patientId && r.patientId.toUpperCase() === targetId);
+        }
       } else {
         allForPatient = await getAll(store);
       }

@@ -324,36 +324,37 @@ export default function DoctorDashboard() {
     loadEpisodeAndTimeline();
   }, [selectedPatient?.patientId]);
 
-  const handlePatientFound = (patient) => {
-    if (patient && patient.patientId) {
-      const pid = patient.patientId;
-      setDismissedPatientIds(prev => prev.filter(id => id !== pid));
-      if (!activePatientIds.includes(pid)) {
-        setActivePatientIds(prev => [...prev, pid]);
+  const handlePatientFound = async (patient) => {
+    if (!patient || !patient.patientId) return;
+    const pid = patient.patientId;
+    setDismissedPatientIds(prev => prev.filter(id => id !== pid));
+    if (!activePatientIds.includes(pid)) {
+      setActivePatientIds(prev => [...prev, pid]);
+    }
+
+    // 1. Immediately switch view to patient file
+    setSelectedPatient(patient);
+    setActiveTab('patientView');
+    setPatientSubTab('records');
+
+    // 2. Ensure doctor assignment and fetch documents immediately
+    const docId = user?.doctorId || user?.id || user?._id;
+    try {
+      if (docId) {
+        await api.put(`/patients/${pid}/assign-doctor`, { doctorId: docId }).catch(() => {});
       }
-
-      // 1. Instant UI switch - display patient profile immediately
-      setSelectedPatient(patient);
-      setActiveTab('patientView');
-      setPatientSubTab('records');
-
-      // 2. Background check: if patient was not yet assigned, confirm assignment
-      const docId = user?.doctorId || user?.id || user?._id;
-      const assignedDoc = patient.assignedDoctor;
-      const docMatch = assignedDoc && (
-        (typeof assignedDoc === 'object' && (assignedDoc.doctorId === docId || assignedDoc._id === user?._id)) ||
-        (typeof assignedDoc === 'string' && (assignedDoc === docId || assignedDoc === user?._id))
-      );
-
-      if (docId && !docMatch) {
-        api.put(`/patients/${pid}/assign-doctor`, { doctorId: docId })
-          .then(updatedPatient => {
-            if (updatedPatient) setSelectedPatient(updatedPatient);
-          })
-          .catch(err => {
-            console.warn('Background assignment confirmation:', err.message);
-          });
-      }
+      const [eps, logs, docs] = await Promise.all([
+        api.get(`/episodes?patientId=${pid}`),
+        api.get(`/dashboard/audit?patientId=${pid}`),
+        api.get(`/patients/${pid}/documents`)
+      ]);
+      const active = (eps || []).find(e => e.status === 'ACTIVE') || (eps && eps[eps.length - 1]) || null;
+      setActiveEpisode(active);
+      setTimelineLogs(logs || []);
+      const resolvedDocs = Array.isArray(docs) ? docs : (docs?.documents || docs?.files || []);
+      setPatientDocuments(resolvedDocs);
+    } catch (err) {
+      console.warn('Initial file and document load note:', err.message);
     }
   };
 
