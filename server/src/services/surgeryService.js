@@ -254,6 +254,17 @@ export async function updateSurgeryStatus(surgeryId, updatePayload, actor) {
     });
   }
 
+  // Archive any pending notifications for completed or cancelled surgeries so doctors never get stale toasts
+  if (newStatus === 'CANCELLED' || newStatus === 'COMPLETED') {
+    try {
+      const Notification = (await import('../models/Notification.js')).default;
+      await Notification.updateMany(
+        { relatedEntity: 'Surgery', relatedEntityId: surgery.surgeryId },
+        { $set: { status: 'ARCHIVED', archivedAt: new Date() } }
+      );
+    } catch (_) {}
+  }
+
   await surgery.save();
   return surgery;
 }

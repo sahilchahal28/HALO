@@ -464,14 +464,31 @@ export function AppProvider({ children }) {
             localStorage.setItem('halo_donors_list', JSON.stringify(dnr));
           } catch (_) { }
         } else if (user.role === 'DOCTOR') {
+          const docId = user.doctorId || user.id;
           const [notes, surg, pts] = await Promise.all([
-            api.get(`/notifications/${user.id}`),
+            api.get(`/notifications/${docId}`),
             api.get('/surgeries'),
             api.get('/patients')
           ]);
 
-          // Doctor receives alerts ONLY for clinical updates, surgery assignments & rounds (NOT ambulance dispatch)
-          const clinicalUnread = (notes || []).filter(n => n.status === 'UNREAD' && n.type !== 'AMBULANCE');
+          // Doctor receives alerts ONLY for active clinical updates & scheduled surgeries (NOT ambulance or cancelled surgeries)
+          const clinicalUnread = (notes || []).filter(n => {
+            if (n.status !== 'UNREAD' || n.type === 'AMBULANCE') return false;
+            if (n.type === 'SURGERY_SCHEDULED' || n.relatedEntity === 'Surgery') {
+              const activeSurgery = (surg || []).find(s => 
+                s.surgeryId === n.relatedEntityId && 
+                s.status === 'SCHEDULED' &&
+                (s.doctorId === docId || s.doctorId === user.id)
+              );
+              if (!activeSurgery) {
+                // Auto-archive stale notification in background so toast is never shown
+                api.put(`/notifications/${n.notificationId}/status`, { status: 'ARCHIVED' }).catch(() => {});
+                return false;
+              }
+            }
+            return true;
+          });
+
           for (const n of clinicalUnread) {
             if (!alertedNotificationIdsRef.current.has(n.notificationId)) {
               alertedNotificationIdsRef.current.add(n.notificationId);

@@ -544,6 +544,27 @@ export async function getDocumentBlobStream({ documentId, actor, actorRole }) {
   const filePath = getLocalFilePath(document.s3Key);
   const { exists } = await checkLocalObjectExists({ key: document.s3Key });
   if (!exists) {
+    // 1. If running on local Mac, attempt to fetch missing file from Railway production backend and save to disk
+    const PRODUCTION_BACKEND = 'https://halo-production-8760181f.up.railway.app';
+    if (!process.env.RAILWAY_ENVIRONMENT && !process.env.RAILWAY_STATIC_URL) {
+      try {
+        const fetchRes = await fetch(`${PRODUCTION_BACKEND}/api/documents/${documentId}/blob`, {
+          headers: { 'bypass-tunnel-reminder': 'true' }
+        });
+        if (fetchRes.ok) {
+          const buffer = Buffer.from(await fetchRes.arrayBuffer());
+          await putLocalObject({ key: document.s3Key, buffer, mimeType: document.mimeType });
+          return {
+            filePath,
+            mimeType: document.mimeType || 'application/octet-stream',
+            filename: document.title,
+            document,
+          };
+        }
+      } catch (_) {}
+    }
+
+    // 2. If running on Railway, check if Mac Vault is online and redirect to it
     try {
       const VaultNode = (await import('../models/VaultNode.js')).default;
       const node = await VaultNode.findOne({ nodeId: 'mac-primary' });

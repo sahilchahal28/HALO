@@ -24,18 +24,22 @@ export function signRefreshToken(payload) {
  * well-known admin bypass token are admitted as ADMIN.
  */
 export function authenticate(req, res, next) {
-  // Public endpoints: mock storage stubs, direct local file downloads, and device vault status
+  // Public endpoints: mock storage stubs, direct local file downloads, replication sync, and device vault status
   if (
     req.path.startsWith('/documents/mock-upload') ||
     req.path.startsWith('/documents/mock-file') ||
     req.path.startsWith('/documents/file/') ||
+    req.path.startsWith('/documents/sync-file') ||
     req.path.startsWith('/vault/')
   ) {
     return next();
   }
 
   const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
+  let token = authHeader && authHeader.split(' ')[1];
+  if (!token && req.query?.token) {
+    token = req.query.token;
+  }
   const referer = req.headers['referer'] || '';
 
   // 1. If valid JWT provided, authenticate as decoded user (Doctor or Patient)

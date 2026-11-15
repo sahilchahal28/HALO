@@ -288,26 +288,29 @@ async function main() {
 
   // Self-healing watchdog: the tunnel can go half-dead (accepts connections
   // but can't proxy). Probe the public URL and restart the tunnel ONLY if it actually fails.
-  let healthy = true;
+  let isRestarting = false;
   setInterval(async () => {
     try {
-      if (!tunnel?.url) return;
+      if (isRestarting || !tunnel?.url) return;
       const ok = await checkTunnelHealth(tunnel.url);
-      if (!ok && healthy) {
-        healthy = false;
+      if (!ok) {
+        isRestarting = true;
         console.warn(`\n[Watchdog] Tunnel not responding (${tunnel.url}). Reconnecting...`);
         try { tunnel.close(); } catch (_) {}
         await new Promise((r) => setTimeout(r, 2500));
-        tunnel = await startTunnel(DEFAULT_SUBDOMAIN);
-        console.log(`[Watchdog] Tunnel restarted at: ${tunnel.url}`);
-        await sendVaultHeartbeat('ONLINE', tunnel.url);
-        healthy = true;
-      } else if (ok && !healthy) {
-        healthy = true;
-        console.log('[Watchdog] Tunnel health recovered.');
+        try {
+          tunnel = await startTunnel(DEFAULT_SUBDOMAIN);
+          console.log(`[Watchdog] Tunnel restarted at: ${tunnel.url}`);
+          await sendVaultHeartbeat('ONLINE', tunnel.url);
+        } catch (reconnectErr) {
+          console.error('[Watchdog] Reconnect attempt failed:', reconnectErr.message);
+        } finally {
+          isRestarting = false;
+        }
       }
     } catch (e) {
       console.error('[Watchdog] Health check error:', e.message);
+      isRestarting = false;
     }
   }, 15000);
 
