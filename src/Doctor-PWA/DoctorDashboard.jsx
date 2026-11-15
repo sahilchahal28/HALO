@@ -16,7 +16,7 @@ import {
 export default function DoctorDashboard() {
   const { 
     user, login, logout, exitApp, t, doctorNotifications, surgeries, 
-    ambulanceRequests, addToast, refreshData, patients, doctors
+    addToast, refreshData, patients, doctors
   } = useApp();
 
   const [activeTab, setActiveTabState] = useState(() => {
@@ -463,7 +463,6 @@ export default function DoctorDashboard() {
       addToast(err.message, 'error');
     }
   };
-  const activeAmbulances = ambulanceRequests.filter(a => a.status !== 'Completed');
   const myDoctorId = user?.doctorId || user?.id;
   const isAssignedToDoctor = (pt) => {
     if (!pt) return false;
@@ -821,25 +820,6 @@ export default function DoctorDashboard() {
                 </div>
               )}
             </div>
-
-            {/* Expected ambulance alerts */}
-            {activeAmbulances.length > 0 && (
-              <div className="bg-red-50/40 border border-red-200 rounded-lg p-4 space-y-3" style={{ borderRadius: '18px' }}>
-                <h3 className="text-xs font-semibold text-[#cf2d56] uppercase flex items-center gap-1.5">
-                  <AlertCircle size={14} /> Emergency Ambulance Dispatches
-                </h3>
-                <div className="space-y-2">
-                  {activeAmbulances.map(a => (
-                    <div key={a.requestId} className="bg-canvas border border-hairline rounded-[11px] p-3 text-xs">
-                      <div className="font-semibold text-ink">{a.patientName} — {a.condition}</div>
-                      <div className="text-[10px] text-ink-muted-48 mt-1">
-                        Loc: {a.location} • Status: <strong className="text-[#cf2d56] uppercase">{a.status}</strong>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
 
             {/* Surgical Feed & Case Management */}
             {(() => {

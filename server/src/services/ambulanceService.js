@@ -62,23 +62,19 @@ export async function createAmbulanceRequest(requestData, patientId) {
     await activeEpisode.save();
   }
 
-  // Alert EVERY active doctor so any of them can respond and claim the
-  // patient by scanning their QR code.
-  const activeDoctors = await Doctor.find({ status: 'ACTIVE' });
-  for (const doc of activeDoctors) {
-    const notifId = `NOT-${Math.floor(100000 + Math.random() * 900000)}`;
-    await Notification.create({
-      notificationId: notifId,
-      recipientType: 'DOCTOR',
-      recipientId: doc.doctorId,
-      type: 'AMBULANCE',
-      title: 'Emergency: Ambulance Dispatch Requested',
-      message: `${patientName} has requested ambulance dispatch. Location: ${requestData.location}. Symptoms: ${requestData.condition}.`,
-      relatedEntity: 'AmbulanceRequest',
-      relatedEntityId: requestId,
-      patientId: effectivePatientId
-    });
-  }
+  // Alert hospital operations & emergency dispatch desk (Admin)
+  const notifId = `NOT-${Math.floor(100000 + Math.random() * 900000)}`;
+  await Notification.create({
+    notificationId: notifId,
+    recipientType: 'ADMIN',
+    recipientId: 'admin',
+    type: 'AMBULANCE',
+    title: 'Emergency: Ambulance Dispatch Requested',
+    message: `${patientName} has requested ambulance dispatch. Location: ${requestData.location}. Symptoms: ${requestData.condition}.`,
+    relatedEntity: 'AmbulanceRequest',
+    relatedEntityId: requestId,
+    patientId: effectivePatientId
+  });
 
   await logAction({
     actor: patientId,
@@ -134,16 +130,16 @@ export async function updateAmbulanceStatus(requestId, status, actor, bodyData =
 
   await request.save();
 
-  // Create notifications depending on status change
-  if (status === 'EN_ROUTE' && request.assignedDoctorId) {
+  // Notify emergency reception (Admin) of en-route arrival
+  if (status === 'EN_ROUTE') {
     const notifId = `NOT-${Math.floor(100000 + Math.random() * 900000)}`;
     await Notification.create({
       notificationId: notifId,
-      recipientType: 'DOCTOR',
-      recipientId: request.assignedDoctorId,
+      recipientType: 'ADMIN',
+      recipientId: 'admin',
       type: 'AMBULANCE',
       title: 'Ambulance En Route',
-      message: `Ambulance for ${request.patientName} is now en route to the hospital. Prepare arrival protocols.`,
+      message: `Ambulance for ${request.patientName || 'Emergency Patient'} is now en route to the hospital. Prepare arrival protocols.`,
       relatedEntity: 'AmbulanceRequest',
       relatedEntityId: requestId,
       patientId: request.patientId

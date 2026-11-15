@@ -1,6 +1,6 @@
 import React, { createContext, useState, useEffect, useContext, useRef } from 'react';
 import { WifiOff } from 'lucide-react';
-import { api, SESSION_REJECTED } from '../utils/api';
+import { api, SESSION_REJECTED, getRoleTokenKey, getRoleUserKey, getActiveRoleFromPath } from '../utils/api';
 import { createSocket } from '../utils/socket';
 import { flushQueue } from '../utils/offlineQueue';
 import { translations } from '../utils/translations';
@@ -10,10 +10,30 @@ const AppContext = createContext();
 
 export function AppProvider({ children }) {
   const [token, setToken] = useState(() => {
-    try { return localStorage.getItem('halo_token') || null; } catch (_) { return null; }
+    try {
+      if (typeof window === 'undefined') return null;
+      const path = window.location.pathname;
+      if (path.startsWith('/admin')) return 'mock-admin-token';
+      if (path.startsWith('/doctor')) return localStorage.getItem('halo_doctor_token') || null;
+      if (path.startsWith('/patient')) return localStorage.getItem('halo_patient_token') || null;
+      return localStorage.getItem('halo_token') || null;
+    } catch (_) { return null; }
   });
   const [user, setUser] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('halo_user') || 'null'); } catch (_) { return null; }
+    try {
+      if (typeof window === 'undefined') return null;
+      const path = window.location.pathname;
+      if (path.startsWith('/admin')) return { id: 'admin', role: 'ADMIN', name: 'Sarah Jenkins (Admin)' };
+      if (path.startsWith('/doctor')) {
+        const d = localStorage.getItem('halo_doctor_user');
+        return d ? JSON.parse(d) : null;
+      }
+      if (path.startsWith('/patient')) {
+        const p = localStorage.getItem('halo_patient_user');
+        return p ? JSON.parse(p) : null;
+      }
+      return JSON.parse(localStorage.getItem('halo_user') || 'null');
+    } catch (_) { return null; }
   });
   const [loading, setLoading] = useState(true);
   const [language, setLanguage] = useState('en'); // 'en' or 'hi'
@@ -84,6 +104,7 @@ export function AppProvider({ children }) {
   // Toast Notification System (Strictly capped at maximum 3 visible toasts everywhere)
   const [toasts, setToasts] = useState([]);
   const lastToastTimeRef = useRef({});
+  const alertedNotificationIdsRef = useRef(new Set());
 
   const removeToast = (id) => {
     setToasts(prev => prev.filter(t => t.id !== id));
@@ -146,12 +167,18 @@ export function AppProvider({ children }) {
       if (path.startsWith('/doctor')) localStorage.setItem('halo_last_role', 'DOCTOR');
       else if (path.startsWith('/patient')) localStorage.setItem('halo_last_role', 'PATIENT');
 
+      const expectedRole = path.startsWith('/doctor') ? 'DOCTOR' : (path.startsWith('/patient') ? 'PATIENT' : (path.startsWith('/admin') ? 'ADMIN' : null));
+      const roleTokenKey = getRoleTokenKey(expectedRole);
+      const roleUserKey = getRoleUserKey(expectedRole);
+
       if (path.startsWith('/admin')) {
         const adminUser = { id: 'admin', role: 'ADMIN', name: 'Sarah Jenkins (Admin)' };
         const adminToken = 'mock-admin-token';
         setToken(adminToken);
         setUser(adminUser);
         try {
+          localStorage.setItem('halo_admin_token', adminToken);
+          localStorage.setItem('halo_admin_user', JSON.stringify(adminUser));
           localStorage.setItem('halo_token', adminToken);
           localStorage.setItem('halo_user', JSON.stringify(adminUser));
           // Admin is always same-origin — remove any stale LAN server URL that
@@ -168,26 +195,31 @@ export function AppProvider({ children }) {
       // otherwise cause "doctor not found" errors on QR-scan assignment.
       try {
         const session = await api.refreshSession();
-        if (!cancelled && session && session !== SESSION_REJECTED && session.token) {
+        // Enforce role isolation: a refreshed session must match the current portal!
+        const isMatchingPortal = !expectedRole || (session?.user?.role === expectedRole);
+
+        if (!cancelled && session && session !== SESSION_REJECTED && session.token && isMatchingPortal) {
           setToken(session.token);
           setUser(session.user);
           try {
+            localStorage.setItem(roleTokenKey, session.token);
+            localStorage.setItem(roleUserKey, JSON.stringify(session.user));
             localStorage.setItem('halo_token', session.token);
             localStorage.setItem('halo_user', JSON.stringify(session.user));
           } catch (_) { }
-        } else if (!cancelled && session === SESSION_REJECTED) {
-          // Server explicitly rejected the session (invalid/expired/ghost) — log out
+        } else if (!cancelled && (session === SESSION_REJECTED || (session?.user && !isMatchingPortal))) {
+          // Server explicitly rejected session or role does not match this portal — keep logged out
           try {
-            localStorage.removeItem('halo_token');
-            localStorage.removeItem('halo_user');
+            localStorage.removeItem(roleTokenKey);
+            localStorage.removeItem(roleUserKey);
           } catch (_) { }
           setToken(null);
           setUser(null);
         } else if (!cancelled) {
-          // null = network failure (offline or server unreachable) — keep cached session
+          // null = network failure (offline or server unreachable) — keep cached role session
           try {
-            const savedToken = localStorage.getItem('halo_token');
-            const savedUser = localStorage.getItem('halo_user');
+            const savedToken = localStorage.getItem(roleTokenKey);
+            const savedUser = localStorage.getItem(roleUserKey);
             setToken(savedToken || null);
             setUser(savedUser ? JSON.parse(savedUser) : null);
           } catch (_) {
@@ -196,11 +228,11 @@ export function AppProvider({ children }) {
           }
         }
       } catch (err) {
-        // Unexpected error (e.g. JSON parse failure) — keep cached session
+        // Unexpected error (e.g. JSON parse failure) — keep cached role session
         if (!cancelled) {
           try {
-            const savedToken = localStorage.getItem('halo_token');
-            const savedUser = localStorage.getItem('halo_user');
+            const savedToken = localStorage.getItem(roleTokenKey);
+            const savedUser = localStorage.getItem(roleUserKey);
             setToken(savedToken || null);
             setUser(savedUser ? JSON.parse(savedUser) : null);
           } catch (_) {
@@ -283,6 +315,8 @@ export function AppProvider({ children }) {
         setToken(adminToken);
         setUser(adminUser);
         try {
+          localStorage.setItem('halo_admin_token', adminToken);
+          localStorage.setItem('halo_admin_user', JSON.stringify(adminUser));
           localStorage.setItem('halo_token', adminToken);
           localStorage.setItem('halo_user', JSON.stringify(adminUser));
         } catch (_) { }
@@ -299,15 +333,17 @@ export function AppProvider({ children }) {
         pin: credentials.pin
       });
 
-      // Remember this device's PWA role (used by the standalone boot redirect)
-      if (role === 'DOCTOR' || role === 'PATIENT') {
-        try { localStorage.setItem('halo_last_role', role); } catch (_) { }
-      }
-
       setToken(res.token);
       setUser(res.user);
 
       try {
+        if (role === 'DOCTOR') {
+          localStorage.setItem('halo_doctor_token', res.token);
+          localStorage.setItem('halo_doctor_user', JSON.stringify(res.user));
+        } else if (role === 'PATIENT') {
+          localStorage.setItem('halo_patient_token', res.token);
+          localStorage.setItem('halo_patient_user', JSON.stringify(res.user));
+        }
         localStorage.setItem('halo_token', res.token);
         localStorage.setItem('halo_user', JSON.stringify(res.user));
       } catch (_) { }
@@ -323,6 +359,9 @@ export function AppProvider({ children }) {
   };
 
   const logout = async () => {
+    const path = typeof window !== 'undefined' ? window.location.pathname : '';
+    const roleToLogout = user?.role || (path.startsWith('/doctor') ? 'DOCTOR' : (path.startsWith('/patient') ? 'PATIENT' : 'ADMIN'));
+
     setToken(null);
     setUser(null);
     setPatientEpisode(null);
@@ -330,6 +369,16 @@ export function AppProvider({ children }) {
     setDoctorNotifications([]);
 
     try {
+      if (roleToLogout === 'DOCTOR') {
+        localStorage.removeItem('halo_doctor_token');
+        localStorage.removeItem('halo_doctor_user');
+      } else if (roleToLogout === 'PATIENT') {
+        localStorage.removeItem('halo_patient_token');
+        localStorage.removeItem('halo_patient_user');
+      } else if (roleToLogout === 'ADMIN') {
+        localStorage.removeItem('halo_admin_token');
+        localStorage.removeItem('halo_admin_user');
+      }
       localStorage.removeItem('halo_token');
       localStorage.removeItem('halo_user');
     } catch (_) { }
@@ -370,6 +419,10 @@ export function AppProvider({ children }) {
   // Poll server state with background awareness and smart state diffing
   useEffect(() => {
     if (!token || !user) return;
+    const path = typeof window !== 'undefined' ? window.location.pathname : '';
+    // Prevent cross-portal polling (e.g. don't poll doctor endpoints while on patient portal or login screen)
+    if (path.startsWith('/doctor') && user.role !== 'DOCTOR') return;
+    if (path.startsWith('/patient') && user.role !== 'PATIENT') return;
 
     const fetchData = async () => {
       // Don't poll if the browser tab/app is backgrounded or hidden
@@ -411,23 +464,23 @@ export function AppProvider({ children }) {
             localStorage.setItem('halo_donors_list', JSON.stringify(dnr));
           } catch (_) { }
         } else if (user.role === 'DOCTOR') {
-          const [notes, surg, amb, pts] = await Promise.all([
+          const [notes, surg, pts] = await Promise.all([
             api.get(`/notifications/${user.id}`),
             api.get('/surgeries'),
-            api.get('/ambulance'),
             api.get('/patients')
           ]);
 
-          // Check if there are new unread notifications to alert the doctor
-          const newUnread = notes.filter(n => n.status === 'UNREAD');
-          if (newUnread.length > doctorNotifications.filter(n => n.status === 'UNREAD').length) {
-            const latest = newUnread[0];
-            addToast(`[ALERT] ${latest.title}: ${latest.message}`, 'error');
+          // Doctor receives alerts ONLY for clinical updates, surgery assignments & rounds (NOT ambulance dispatch)
+          const clinicalUnread = (notes || []).filter(n => n.status === 'UNREAD' && n.type !== 'AMBULANCE');
+          for (const n of clinicalUnread) {
+            if (!alertedNotificationIdsRef.current.has(n.notificationId)) {
+              alertedNotificationIdsRef.current.add(n.notificationId);
+              addToast(`[CLINICAL UPDATE] ${n.title}: ${n.message}`, 'info');
+            }
           }
 
           setDoctorNotifications(prev => (JSON.stringify(prev) !== JSON.stringify(notes) ? notes : prev));
           setSurgeries(prev => (JSON.stringify(prev) !== JSON.stringify(surg) ? surg : prev));
-          setAmbulanceRequests(prev => (JSON.stringify(prev) !== JSON.stringify(amb) ? amb : prev));
           setPatients(prev => (JSON.stringify(prev) !== JSON.stringify(pts) ? pts : prev));
         } else if (user.role === 'PATIENT' && (user.patientId || user.id)) {
           const pid = user.patientId || user.id;
@@ -503,12 +556,14 @@ export function AppProvider({ children }) {
         setSurgeries(await api.get('/surgeries'));
         setDonorsList(await api.get('/bloodbank/donors-list'));
       } else if (user.role === 'DOCTOR') {
-        const [notes, dcs, pts] = await Promise.all([
+        const [notes, surg, dcs, pts] = await Promise.all([
           api.get(`/notifications/${user.id}`),
+          api.get('/surgeries'),
           api.get('/doctors'),
           api.get('/patients')
         ]);
         setDoctorNotifications(notes || []);
+        setSurgeries(surg || []);
         setDoctors(dcs || []);
         setPatients(pts || []);
       } else if (user.role === 'PATIENT' && (user.patientId || user.id)) {

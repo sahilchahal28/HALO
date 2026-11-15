@@ -18,7 +18,30 @@ import { enqueueMutation } from './offlineQueue';
  */
 
 export const SERVER_URL_KEY = 'halo_server_url';
-const TOKEN_KEY = 'halo_token';
+export const TOKEN_KEY = 'halo_token';
+
+export function getActiveRoleFromPath() {
+  if (typeof window === 'undefined') return null;
+  const path = window.location.pathname;
+  if (path.startsWith('/doctor')) return 'DOCTOR';
+  if (path.startsWith('/patient')) return 'PATIENT';
+  if (path.startsWith('/admin')) return 'ADMIN';
+  return null;
+}
+
+export function getRoleTokenKey(role = getActiveRoleFromPath()) {
+  if (role === 'DOCTOR') return 'halo_doctor_token';
+  if (role === 'PATIENT') return 'halo_patient_token';
+  if (role === 'ADMIN') return 'halo_admin_token';
+  return TOKEN_KEY;
+}
+
+export function getRoleUserKey(role = getActiveRoleFromPath()) {
+  if (role === 'DOCTOR') return 'halo_doctor_user';
+  if (role === 'PATIENT') return 'halo_patient_user';
+  if (role === 'ADMIN') return 'halo_admin_user';
+  return 'halo_user';
+}
 
 function isPageHttps() {
   try {
@@ -74,8 +97,15 @@ export class ApiError extends Error {
 
 function getToken() {
   try {
-    const t = localStorage.getItem(TOKEN_KEY);
+    const role = getActiveRoleFromPath();
+    if (role === 'ADMIN') return 'mock-admin-token';
+    const key = getRoleTokenKey(role);
+    const t = localStorage.getItem(key);
     if (t) return t;
+    if (!role) {
+      const fallback = localStorage.getItem(TOKEN_KEY);
+      if (fallback) return fallback;
+    }
     if (typeof window !== 'undefined' && window.location.pathname.startsWith('/admin')) {
       return 'mock-admin-token';
     }
@@ -85,10 +115,16 @@ function getToken() {
   }
 }
 
-export function setToken(token) {
+export function setToken(token, role = getActiveRoleFromPath()) {
   try {
-    if (token) localStorage.setItem(TOKEN_KEY, token);
-    else localStorage.removeItem(TOKEN_KEY);
+    const key = getRoleTokenKey(role);
+    if (token) {
+      localStorage.setItem(key, token);
+      if (!role) localStorage.setItem(TOKEN_KEY, token);
+    } else {
+      localStorage.removeItem(key);
+      if (!role) localStorage.removeItem(TOKEN_KEY);
+    }
   } catch (_) {}
 }
 
@@ -244,10 +280,12 @@ const inFlightGets = new Map();
 async function rawRequest(endpoint, options = {}, isRetry = false) {
   const token = getToken();
   const base = getApiBase();
+  const activeRole = getActiveRoleFromPath();
 
   const headers = {
     'bypass-tunnel-reminder': 'true',
     'ngrok-skip-browser-warning': 'true',
+    ...(activeRole && { 'x-role': activeRole }),
     ...(options.body && !(options.body instanceof FormData) && { 'Content-Type': 'application/json' }),
     ...(token && { Authorization: `Bearer ${token}` }),
     ...options.headers,
