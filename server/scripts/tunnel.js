@@ -157,12 +157,16 @@ async function startTunnel(requestedSubdomain, attempt = 1) {
 // connections but can't proxy to the backend (surface as 408/503 to clients).
 function checkTunnelHealth(publicUrl) {
   return new Promise((resolve) => {
-    const req = https.get(`${publicUrl}/health`, (res) => {
+    if (!publicUrl) return resolve(false);
+    const client = publicUrl.startsWith('https') ? https : http;
+    const req = client.get(`${publicUrl}/health`, {
+      headers: { 'bypass-tunnel-reminder': 'true', 'User-Agent': 'HALO-Watchdog/1.0' }
+    }, (res) => {
       res.resume();
       resolve(res.statusCode === 200);
     });
     req.on('error', () => resolve(false));
-    req.setTimeout(6000, () => {
+    req.setTimeout(12000, () => {
       req.destroy();
       resolve(false);
     });
@@ -233,6 +237,15 @@ async function main() {
   let tunnel = await startTunnel(DEFAULT_SUBDOMAIN);
   const publicUrl = tunnel.url;
 
+  try {
+    const fs = await import('fs');
+    const path = await import('path');
+    const stateFile = path.resolve(process.cwd(), 'server/storage/.vault-state.json');
+    const dir = path.dirname(stateFile);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(stateFile, JSON.stringify({ enabled: true, updatedAt: new Date().toISOString() }, null, 2));
+  } catch (_) {}
+
   // Register Mac Device Storage Vault as ONLINE in MongoDB
   await sendVaultHeartbeat('ONLINE', publicUrl);
   console.log('[Mac Device Vault] Registered status: ONLINE with active tunnel.');
@@ -286,37 +299,56 @@ async function main() {
     });
   }
 
-  // Self-healing watchdog: the tunnel can go half-dead (accepts connections
-  // but can't proxy). Probe the public URL and restart the tunnel ONLY if it actually fails.
+  // Self-healing watchdog: probe the public URL every 30s.
+  // Requires 3 consecutive health probe failures before restarting to prevent flapping.
   let isRestarting = false;
-  setInterval(async () => {
-    try {
-      if (isRestarting || !tunnel?.url) return;
-      const ok = await checkTunnelHealth(tunnel.url);
-      if (!ok) {
-        isRestarting = true;
-        console.warn(`\n[Watchdog] Tunnel not responding (${tunnel.url}). Reconnecting...`);
-        try { tunnel.close(); } catch (_) {}
-        await new Promise((r) => setTimeout(r, 2500));
-        try {
-          tunnel = await startTunnel(DEFAULT_SUBDOMAIN);
-          console.log(`[Watchdog] Tunnel restarted at: ${tunnel.url}`);
-          await sendVaultHeartbeat('ONLINE', tunnel.url);
-        } catch (reconnectErr) {
-          console.error('[Watchdog] Reconnect attempt failed:', reconnectErr.message);
-        } finally {
-          isRestarting = false;
+  let consecutiveFailures = 0;
+  // Give tunnel 45 seconds of initial grace period before first health probe
+  setTimeout(() => {
+    setInterval(async () => {
+      try {
+        if (isRestarting || !tunnel?.url) return;
+        const ok = await checkTunnelHealth(tunnel.url);
+        if (ok) {
+          consecutiveFailures = 0;
+          return;
         }
+
+        consecutiveFailures++;
+        console.warn(`[Watchdog] Probe failed (${consecutiveFailures}/3) for ${tunnel.url}`);
+
+        if (consecutiveFailures >= 3) {
+          isRestarting = true;
+          console.warn(`\n[Watchdog] Tunnel not responding after 3 consecutive probes (${tunnel.url}). Reconnecting...`);
+          try { tunnel.close(); } catch (_) {}
+          await new Promise((r) => setTimeout(r, 3000));
+          try {
+            tunnel = await startTunnel(DEFAULT_SUBDOMAIN);
+            console.log(`[Watchdog] Tunnel restarted at: ${tunnel.url}`);
+            await sendVaultHeartbeat('ONLINE', tunnel.url);
+            consecutiveFailures = 0;
+          } catch (reconnectErr) {
+            console.error('[Watchdog] Reconnect attempt failed:', reconnectErr.message);
+          } finally {
+            isRestarting = false;
+          }
+        }
+      } catch (e) {
+        console.error('[Watchdog] Health check error:', e.message);
+        isRestarting = false;
       }
-    } catch (e) {
-      console.error('[Watchdog] Health check error:', e.message);
-      isRestarting = false;
-    }
-  }, 15000);
+    }, 30000);
+  }, 45000);
 
   const shutdown = async () => {
     console.log('\n[HALO Tunnel] Deregistering Mac Device Storage Vault...');
     clearInterval(heartbeatInterval);
+    try {
+      const fs = await import('fs');
+      const path = await import('path');
+      const stateFile = path.resolve(process.cwd(), 'server/storage/.vault-state.json');
+      fs.writeFileSync(stateFile, JSON.stringify({ enabled: false, updatedAt: new Date().toISOString() }, null, 2));
+    } catch (_) {}
     await sendVaultHeartbeat('OFFLINE', '');
     try { tunnel.close(); } catch (_) {}
     if (serverProc) serverProc.kill();
