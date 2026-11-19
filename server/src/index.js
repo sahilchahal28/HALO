@@ -26,11 +26,63 @@ function getLanIp() {
 // like Railway where Atlas is reached over the public internet).
 try {
   await connectDB();
-  // Start the background data retention auto-deletion worker (runs every 24h) if enabled
-  if (process.env.ENABLE_OBJECT_STORAGE_WORKER === 'true') {
+  // Start the background data retention auto-deletion worker (runs every 24h)
+  if (process.env.ENABLE_OBJECT_STORAGE_WORKER !== 'false') {
     startRetentionWorker();
   } else {
     console.log('[Retention Worker] Object storage background worker disabled.');
+  }
+
+  // Register Mac Device Storage Vault as ONLINE in MongoDB if running locally and not explicitly stopped
+  if (!process.env.RAILWAY_ENVIRONMENT && !process.env.RAILWAY_STATIC_URL) {
+    try {
+      const VaultNode = (await import('./models/VaultNode.js')).default;
+      const fs = await import('fs');
+      const stateFilePath = path.join(process.cwd(), 'server/storage/.vault-state.json');
+      let isVaultExplicitlyDisabled = false;
+      try {
+        if (fs.existsSync(stateFilePath)) {
+          const rawState = JSON.parse(fs.readFileSync(stateFilePath, 'utf8'));
+          if (rawState.enabled === false) isVaultExplicitlyDisabled = true;
+        }
+      } catch (_) {}
+
+      const existingNode = await VaultNode.findOne({ nodeId: 'mac-primary' }).lean();
+      if (!isVaultExplicitlyDisabled && (!existingNode || existingNode.status !== 'OFFLINE')) {
+        const lanIp = getLanIp();
+        await VaultNode.findOneAndUpdate(
+          { nodeId: 'mac-primary' },
+          {
+            $set: {
+              status: 'ONLINE',
+              storageProvider: 'Mac Disk Space (server/storage/users/records)',
+              localUrl: `http://127.0.0.1:${PORT}`,
+              lanUrl: `http://${lanIp}:${PORT}`,
+              lastHeartbeat: new Date(),
+            }
+          },
+          { upsert: true }
+        );
+        console.log('[Mac Storage Vault] Registered status: ONLINE in database.');
+      } else {
+        console.log('[Mac Storage Vault] Device storage is currently in STOPPED (OFFLINE) mode.');
+      }
+
+      // Maintain active heartbeat every 15s ONLY while vault remains ONLINE
+      setInterval(async () => {
+        try {
+          const currentNode = await VaultNode.findOne({ nodeId: 'mac-primary' }).lean();
+          if (currentNode && currentNode.status === 'ONLINE') {
+            await VaultNode.updateOne(
+              { nodeId: 'mac-primary' },
+              { $set: { lastHeartbeat: new Date() } }
+            );
+          }
+        } catch (_) {}
+      }, 15000);
+    } catch (vaultErr) {
+      console.warn('[Mac Storage Vault] Initialization note:', vaultErr.message);
+    }
   }
 } catch (err) {
   console.error('[HALO Server] Database connection failed:', err.message);

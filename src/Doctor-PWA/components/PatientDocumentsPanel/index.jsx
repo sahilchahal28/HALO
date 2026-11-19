@@ -52,7 +52,15 @@ export default function PatientDocumentsPanel({
       if (e.detail) setVaultStatus(e.detail);
     };
     window.addEventListener('halo:vault:status', handleVaultStatus);
-    return () => window.removeEventListener('halo:vault:status', handleVaultStatus);
+    const interval = setInterval(() => {
+      HALOArchive.checkVaultStatus().then(status => {
+        if (status) setVaultStatus(status);
+      });
+    }, 15000);
+    return () => {
+      window.removeEventListener('halo:vault:status', handleVaultStatus);
+      clearInterval(interval);
+    };
   }, []);
 
   // Sync initialDocuments if they update from parent
@@ -241,12 +249,12 @@ export default function PatientDocumentsPanel({
 
   // On-Device Download Handler
   const handleDownload = async (doc) => {
-    const docId = doc.documentId || doc.fileKey;
+    const docId = doc.documentId || doc.fileKey || doc.s3Key;
     setActionLoadingDocId(docId);
     try {
       const { blobUrl } = await HALOArchive.fetchAndCacheBlob({
         documentId: doc.documentId,
-        fileKey: doc.fileKey,
+        fileKey: doc.fileKey || doc.s3Key || doc.fileRef,
         metadata: doc,
       });
 
@@ -326,6 +334,9 @@ export default function PatientDocumentsPanel({
               syncStatus: 'SYNCED',
             },
           });
+          window.dispatchEvent(
+            new CustomEvent('halo:store:updated', { detail: { patientId, documentId: res.documentId, action: 'uploaded' } })
+          );
         }
         addToast('Medical record archived and synchronized to patient file!', 'success');
       } catch (uploadErr) {

@@ -287,27 +287,18 @@ export const ObjectStore = {
 
     const db = await getDB();
 
-    const records = await withTransaction(db, [STORES.OBJECTS], 'readonly', async (tx) => {
+    const records = await withTransaction(db, [STORES.OBJECTS], 'readonly', (tx) => {
       const store = tx.objectStore(STORES.OBJECTS);
-
-      // Fast-path index lookup by patientId if available with case-insensitive fallback
-      let allForPatient = [];
-      if (patientId) {
-        const index = store.index('patientId');
-        const targetId = String(patientId).trim().toUpperCase();
-        allForPatient = await getAll(index, targetId);
-        if (!allForPatient || allForPatient.length === 0) {
-          const allDocs = await getAll(store);
-          allForPatient = (allDocs || []).filter(r => r.patientId && r.patientId.toUpperCase() === targetId);
-        }
-      } else {
-        allForPatient = await getAll(store);
-      }
-      return allForPatient;
+      return getAll(store);
     });
 
+    const targetId = patientId ? String(patientId).trim().toUpperCase() : null;
+    const recordsForPatient = targetId
+      ? (records || []).filter(r => r.patientId && String(r.patientId).trim().toUpperCase() === targetId)
+      : (records || []);
+
     // In-memory filter pipeline
-    let filtered = records.filter((rec) => {
+    let filtered = recordsForPatient.filter((rec) => {
       if (rec.status === 'DELETED') return false;
 
       // Filter by type

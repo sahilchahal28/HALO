@@ -23,9 +23,18 @@ let _currentSubscribedPatientId = null;
 let _currentRole = 'DOCTOR';
 let _vaultStatusCache = { online: false, checkedAt: 0 };
 
-function getAuthToken() {
+function getAuthToken(role = _currentRole) {
   try {
-    return localStorage.getItem('halo_token');
+    const roleKey = role === 'DOCTOR'
+      ? 'halo_doctor_token'
+      : (role === 'PATIENT' ? 'halo_patient_token' : (role === 'ADMIN' ? 'halo_admin_token' : 'halo_token'));
+    const t = localStorage.getItem(roleKey) ||
+      localStorage.getItem('halo_token') ||
+      localStorage.getItem('halo_doctor_token') ||
+      localStorage.getItem('halo_patient_token');
+    if (t) return t;
+    if (role === 'ADMIN') return 'mock-admin-token';
+    return null;
   } catch (_) {
     return null;
   }
@@ -73,6 +82,18 @@ export const HALOArchive = {
   },
 
   /**
+   * Internal handler for socket reconnect
+   */
+  _handleSocketConnect() {
+    console.log('[HALOArchive] Socket connected/reconnected.');
+    if (_currentSubscribedPatientId && _activeSocket) {
+      _activeSocket.emit('subscribe:patient', _currentSubscribedPatientId);
+      console.log(`[HALOArchive] Re-subscribed to patient ${_currentSubscribedPatientId} on reconnect`);
+      this.syncDelta({ patientId: _currentSubscribedPatientId, role: _currentRole });
+    }
+  },
+
+  /**
    * Bind the active Socket.io instance for real-time document events.
    *
    * @param {import('socket.io-client').Socket} socket
@@ -88,6 +109,11 @@ export const HALOArchive = {
     }
     ObjectStore.setRole(role);
 
+    // Bind handlers to ensure correct 'this'
+    this._handleDocumentUploaded = this._handleDocumentUploaded.bind(this);
+    this._handleDocumentDeleted = this._handleDocumentDeleted.bind(this);
+    this._handleSocketConnect = this._handleSocketConnect.bind(this);
+
     // Clean up any existing listeners to prevent duplicates
     socket.off('document:uploaded', this._handleDocumentUploaded);
     socket.off('document:deleted', this._handleDocumentDeleted);
@@ -96,15 +122,7 @@ export const HALOArchive = {
     // Register handlers
     socket.on('document:uploaded', this._handleDocumentUploaded);
     socket.on('document:deleted', this._handleDocumentDeleted);
-    socket.on('connect', () => {
-      console.log('[HALOArchive] Socket connected/reconnected.');
-      if (_currentSubscribedPatientId) {
-        socket.emit('subscribe:patient', _currentSubscribedPatientId);
-        console.log(`[HALOArchive] Re-subscribed to patient ${_currentSubscribedPatientId} on reconnect`);
-        // Immediately fetch deltas upon reconnect to catch mutations that occurred while offline
-        this.syncDelta({ patientId: _currentSubscribedPatientId, role: _currentRole });
-      }
-    });
+    socket.on('connect', this._handleSocketConnect);
 
     // Handle room subscriptions based on role
     if (patientId) {
@@ -217,12 +235,8 @@ export const HALOArchive = {
       return [];
     }
 
-    // Gate remote delta sync: only sync with disk storage when npm run tunnel is running!
-    const vault = await this.checkVaultStatus();
-    if (!vault.online) {
-      console.log('[HALOArchive] Mac Device Storage Vault is offline. Run "npm run tunnel" on terminal to sync documents.');
-      return [];
-    }
+    // Refresh vault cache
+    await this.checkVaultStatus().catch(() => {});
 
     const queryParams = new URLSearchParams();
     if (patientId) queryParams.set('patientId', patientId);
@@ -396,22 +410,42 @@ export const HALOArchive = {
     }
 
     // 2. Fetch from server's binary stream with timeout and fallback
-    const vault = await this.checkVaultStatus();
-    const base = vault.tunnelUrl || getApiBase();
-    const token = getAuthToken();
+    const vault = await this.checkVaultStatus().catch(() => ({ online: false }));
+    const currentApiBase = getApiBase();
+    const token = getAuthToken(_currentRole);
     const PRODUCTION_BACKEND = 'https://halo-production-8760181f.up.railway.app';
+
+    // Prioritize direct same-origin/local server first so local Mac calls are instant and robust!
+    const candidateBases = [];
+    if (currentApiBase) candidateBases.push(currentApiBase);
+    candidateBases.push(''); // same-origin (dev proxy or direct host)
+    if (vault.tunnelUrl && !candidateBases.includes(vault.tunnelUrl)) {
+      candidateBases.push(vault.tunnelUrl);
+    }
+    if (!candidateBases.includes(PRODUCTION_BACKEND)) {
+      candidateBases.push(PRODUCTION_BACKEND);
+    }
+    if (!candidateBases.includes('http://127.0.0.1:5001')) {
+      candidateBases.push('http://127.0.0.1:5001');
+    }
 
     const fetchStream = async (baseUrl) => {
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 10000); // 10s timeout
+      const timer = setTimeout(() => controller.abort(), 6000); // 6s timeout
       try {
-        const url = `${baseUrl}/api/documents/${documentId}/blob`;
+        const queryParams = new URLSearchParams();
+        if (token) queryParams.set('token', token);
+        queryParams.set('bypass-tunnel-reminder', 'true');
+        queryParams.set('ngrok-skip-browser-warning', 'true');
+
+        const url = `${baseUrl}/api/documents/${documentId}/blob?${queryParams.toString()}`;
         const res = await fetch(url, {
           method: 'GET',
           signal: controller.signal,
           headers: {
             'bypass-tunnel-reminder': 'true',
             'ngrok-skip-browser-warning': 'true',
+            'x-role': _currentRole,
             ...(token && { Authorization: `Bearer ${token}` }),
           },
         });
@@ -424,33 +458,31 @@ export const HALOArchive = {
     };
 
     let res = null;
-    try {
-      res = await fetchStream(base);
-      if (!res.ok) {
-        // Try direct production Railway backend if custom/same-origin base returned an error
-        if (base !== PRODUCTION_BACKEND) {
-          try {
-            const tunnelRes = await fetchStream(PRODUCTION_BACKEND);
-            if (tunnelRes.ok) res = tunnelRes;
-          } catch (_) {}
-        }
-        if (!res?.ok && base) {
-          try {
-            const fallbackRes = await fetchStream('');
-            if (fallbackRes.ok) res = fallbackRes;
-          } catch (_) {}
-        }
-      }
-    } catch (_) {
+    for (const base of candidateBases) {
       try {
-        res = await fetchStream(PRODUCTION_BACKEND);
-      } catch (_) {
-        if (base) {
-          try {
-            res = await fetchStream('');
-          } catch (_) {}
+        const streamRes = await fetchStream(base);
+        if (streamRes && streamRes.ok) {
+          res = streamRes;
+          break;
         }
-      }
+      } catch (_) {}
+    }
+
+    // Secondary fallback: attempt direct file URL if blob stream endpoint failed
+    if (!res || !res.ok) {
+      try {
+        const dlRes = await api.get(`/documents/${documentId}/download-url`);
+        if (dlRes?.downloadUrl) {
+          const directUrl = getFileUrl(dlRes.downloadUrl);
+          const dlResObj = await fetch(directUrl, {
+            headers: {
+              'bypass-tunnel-reminder': 'true',
+              ...(token && { Authorization: `Bearer ${token}` }),
+            },
+          });
+          if (dlResObj && dlResObj.ok) res = dlResObj;
+        }
+      } catch (_) {}
     }
 
     if (!res || !res.ok) {
@@ -470,14 +502,14 @@ export const HALOArchive = {
         }
       }
 
-      if (!vault.online) {
+      if (!vault.online && typeof window !== 'undefined' && !window.location.hostname.includes('localhost') && !window.location.hostname.includes('127.0.0.1')) {
         throw new Error('This document is stored on your Mac disk. Please run "npm run tunnel" on your Mac terminal to connect disk storage and view.');
       }
 
       throw new Error(
         !navigator.onLine
           ? 'You are offline. This document has not been downloaded to your device yet. Reconnect to Wi-Fi to view.'
-          : (res ? `Failed to load document (${res.status}).` : 'Unable to connect to archive server. Please verify your Wi-Fi connection.')
+          : (res ? `Failed to load document (${res.status}).` : 'Unable to connect to archive server. Please verify your connection.')
       );
     }
 
@@ -506,6 +538,14 @@ export const HALOArchive = {
         mimeType,
       },
     });
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('halo:store:updated', {
+          detail: { patientId: metadata.patientId, documentId, fileKey: targetKey, action: 'cached' },
+        })
+      );
+    }
 
     const blobUrl = URL.createObjectURL(blob);
     return {

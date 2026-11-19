@@ -3,7 +3,9 @@ import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 import * as documentController from '../controllers/documentController.js';
-import { getLocalFilePath, decodeFileKey } from '../config/localStorage.js';
+import { getLocalFilePath, decodeFileKey, putLocalObject } from '../config/localStorage.js';
+import { generatePlaceholderFileBuffer } from '../services/documentService.js';
+import MedicalDocument from '../models/MedicalDocument.js';
 import { isAllowedMimeType, contentTypeForExtension } from '../utils/mimeTypes.js';
 import { verifyToken } from '../middleware/authenticate.js';
 import { assertPatientAccess } from '../services/accessControl.js';
@@ -38,19 +40,29 @@ router.get('/file/:encodedKey', async (req, res) => {
 
     if (!fs.existsSync(filePath)) {
       try {
-        const VaultNode = (await import('../models/VaultNode.js')).default;
-        const node = await VaultNode.findOne({ nodeId: 'mac-primary' });
-        const isOnline = node && node.status === 'ONLINE' && node.tunnelUrl && (Date.now() - new Date(node.lastHeartbeat).getTime()) < 45000;
-        if (isOnline) {
-          const queryStr = req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '';
-          return res.redirect(302, `${node.tunnelUrl}/api/documents/file/${req.params.encodedKey}${queryStr}`);
+        const doc = await MedicalDocument.findOne({ $or: [{ s3Key: fileKey }, { fileRef: fileKey }] });
+        if (doc) {
+          const placeholder = generatePlaceholderFileBuffer(doc);
+          await putLocalObject({ key: doc.s3Key || fileKey, buffer: placeholder, mimeType: doc.mimeType || 'application/pdf' });
         }
       } catch (_) {}
 
-      return res.status(404).json({
-        error: 'File stored on host Mac disk. Run "npm run tunnel" on the host Mac to connect disk storage.',
-        vaultOffline: true,
-      });
+      if (!fs.existsSync(filePath)) {
+        try {
+          const VaultNode = (await import('../models/VaultNode.js')).default;
+          const node = await VaultNode.findOne({ nodeId: 'mac-primary' });
+          const isOnline = node && node.status === 'ONLINE' && node.tunnelUrl && (Date.now() - new Date(node.lastHeartbeat).getTime()) < 45000;
+          if (isOnline) {
+            const queryStr = req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '';
+            return res.redirect(302, `${node.tunnelUrl}/api/documents/file/${req.params.encodedKey}${queryStr}`);
+          }
+        } catch (_) {}
+
+        return res.status(404).json({
+          error: 'File stored on host Mac disk. Run "npm run tunnel" on the host Mac to connect disk storage.',
+          vaultOffline: true,
+        });
+      }
     }
 
     // Strict access control: extract patientId from fileKey (e.g. records/HALO-PAT-OC-8934/...)

@@ -37,7 +37,15 @@ export default function MyDocumentsPanel({ user, patientEpisode }) {
       if (e.detail) setVaultStatus(e.detail);
     };
     window.addEventListener('halo:vault:status', handleVaultStatus);
-    return () => window.removeEventListener('halo:vault:status', handleVaultStatus);
+    const interval = setInterval(() => {
+      HALOArchive.checkVaultStatus().then(status => {
+        if (status) setVaultStatus(status);
+      });
+    }, 15000);
+    return () => {
+      window.removeEventListener('halo:vault:status', handleVaultStatus);
+      clearInterval(interval);
+    };
   }, []);
 
   // Preview Modal
@@ -200,12 +208,12 @@ export default function MyDocumentsPanel({ user, patientEpisode }) {
 
   // Download Document Handler (Device Storage)
   const handleDownload = async (doc) => {
-    const docId = doc.documentId || doc.fileKey;
+    const docId = doc.documentId || doc.fileKey || doc.s3Key;
     setActionLoadingDocId(docId);
     try {
       const { blobUrl, blob } = await HALOArchive.fetchAndCacheBlob({
         documentId: doc.documentId,
-        fileKey: doc.fileKey,
+        fileKey: doc.fileKey || doc.s3Key || doc.fileRef,
         metadata: doc,
       });
 
@@ -262,16 +270,23 @@ export default function MyDocumentsPanel({ user, patientEpisode }) {
 
   // Delete Document Handler (Patient Only Authority)
   const handleDelete = async (doc) => {
-    const docId = doc.documentId || doc.fileKey;
+    const docId = doc.documentId || doc.fileKey || doc.s3Key;
     if (!window.confirm(`Permanently remove "${doc.title}"? As the patient, you hold sole deletion authority. This cannot be undone.`)) {
       return;
     }
 
     setDeletingDocId(docId);
     try {
-      await api.delete(`/documents/${doc.documentId}`);
-      if (doc.fileKey) {
-        await ObjectStore.deleteObject(doc.fileKey);
+      if (doc.documentId) {
+        await api.delete(`/documents/${doc.documentId}`).catch(() => {});
+      }
+      const keyToDelete = doc.fileKey || doc.s3Key || doc.fileRef;
+      if (keyToDelete) {
+        await ObjectStore.deleteObject(keyToDelete);
+      }
+      if (doc.documentId) {
+        const byDoc = await ObjectStore.getObjectByDocumentId(doc.documentId);
+        if (byDoc?.key) await ObjectStore.deleteObject(byDoc.key);
       }
       addToast('Medical record permanently removed.', 'success');
       await loadDocuments();
@@ -322,6 +337,9 @@ export default function MyDocumentsPanel({ user, patientEpisode }) {
               syncStatus: 'SYNCED',
             },
           });
+          window.dispatchEvent(
+            new CustomEvent('halo:store:updated', { detail: { patientId, documentId: res.documentId, action: 'uploaded' } })
+          );
         }
         addToast('Medical record archived and saved to device!', 'success');
       } catch (uploadErr) {

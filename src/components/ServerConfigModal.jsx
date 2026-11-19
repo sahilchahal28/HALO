@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Server, Wifi, WifiOff, CheckCircle2, AlertCircle, RefreshCw, X, HardDrive } from 'lucide-react';
+import { Server, Wifi, WifiOff, CheckCircle2, AlertCircle, RefreshCw, X, HardDrive, Terminal } from 'lucide-react';
 import { getApiBase, setServerUrl, clearServerUrl } from '../utils/api';
 
 /**
@@ -28,14 +28,34 @@ export default function ServerConfigModal({ isOpen, onClose, addToast }) {
   const [detectedLanIp, setDetectedLanIp] = useState('');
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState(null); // { success: boolean, message: string }
+  const [vaultInfo, setVaultInfo] = useState(null);
+  const [loadingVault, setLoadingVault] = useState(false);
 
-  // Detect server LAN IP on mount
+  const fetchVaultStatus = async () => {
+    setLoadingVault(true);
+    try {
+      const res = await fetch(`${getApiBase()}/api/vault/status`);
+      if (res.ok) {
+        const data = await res.json();
+        setVaultInfo(data);
+      } else {
+        setVaultInfo({ online: false, message: 'Mac storage vault is currently offline' });
+      }
+    } catch (_) {
+      setVaultInfo({ online: false, message: 'Could not connect to host vault' });
+    } finally {
+      setLoadingVault(false);
+    }
+  };
+
+  // Detect server LAN IP & Vault status on mount
   useEffect(() => {
     if (!isOpen) return;
 
     setCurrentBase(getApiBase());
     setInputUrl(getApiBase() || '');
     setTestResult(null);
+    fetchVaultStatus();
 
     // Probe server-info to discover the host's actual LAN IP
     fetch(`${getApiBase()}/api/server-info`)
@@ -169,6 +189,53 @@ export default function ServerConfigModal({ isOpen, onClose, addToast }) {
           <div className="flex items-start gap-2 pt-1 border-t border-hairline text-[11px] text-ink-muted-85">
             <HardDrive size={13} className="shrink-0 mt-0.5 text-primary" />
             <span>Files are uploaded directly to your device disk under <code>server/storage/users/</code>.</span>
+          </div>
+        </div>
+
+        {/* Mac Device Storage Vault Status & Quick Control */}
+        <div className="bg-canvas-parchment/60 border border-hairline p-3.5 rounded-2xl space-y-2.5">
+          <div className="flex items-center justify-between text-xs">
+            <div className="flex items-center gap-1.5 font-medium text-ink">
+              <HardDrive size={13} className="text-primary" />
+              <span>Mac Storage Vault</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                vaultInfo?.online 
+                  ? 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20' 
+                  : 'bg-ink-muted-48/10 text-ink-muted-85 border border-hairline'
+              }`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${vaultInfo?.online ? 'bg-emerald-500 animate-pulse' : 'bg-ink-muted-48'}`} />
+                {vaultInfo?.online ? 'ONLINE' : 'STOPPED / OFFLINE'}
+              </span>
+              <button
+                type="button"
+                onClick={fetchVaultStatus}
+                disabled={loadingVault}
+                title="Refresh Vault Status"
+                className="p-1 rounded-full text-ink-muted-48 hover:text-ink hover:bg-canvas border border-hairline cursor-pointer disabled:opacity-50"
+              >
+                <RefreshCw size={11} className={loadingVault ? 'animate-spin text-primary' : ''} />
+              </button>
+            </div>
+          </div>
+
+          {vaultInfo?.tunnelUrl && (
+            <div className="text-[10px] bg-canvas border border-hairline px-2.5 py-1.5 rounded-xl font-mono text-ink-muted-85 flex items-center justify-between">
+              <span className="truncate">Tunnel: {vaultInfo.tunnelUrl}</span>
+            </div>
+          )}
+
+          <div className="bg-canvas border border-hairline p-2 rounded-xl text-[10px] text-ink-muted-85 space-y-1">
+            <div className="flex items-center gap-1.5 font-semibold text-ink">
+              <Terminal size={11} className="text-primary" />
+              <span>Mac Terminal Commands:</span>
+            </div>
+            <div className="font-mono text-[10px] text-ink-muted-85 pl-4 space-y-0.5">
+              <div>• Turn ON: <code className="text-primary font-bold">npm run storage:on</code></div>
+              <div>• Turn OFF: <code className="text-rose-600 font-bold">npm run storage:off</code></div>
+              <div>• Check: <code className="text-ink font-bold">npm run storage:status</code></div>
+            </div>
           </div>
         </div>
 

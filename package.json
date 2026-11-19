@@ -16,6 +16,13 @@
     "lint": "oxlint",
     "preview": "vite preview",
     "tunnel": "node server/scripts/tunnel.js",
+    "vault:start": "node server/scripts/vault-control.js start",
+    "vault:stop": "node server/scripts/vault-control.js stop",
+    "vault:status": "node server/scripts/vault-control.js status",
+    "vault:sync": "node server/scripts/vault-control.js sync",
+    "storage:on": "node server/scripts/vault-control.js start",
+    "storage:off": "node server/scripts/vault-control.js stop",
+    "storage:status": "node server/scripts/vault-control.js status",
     "s3:setup": "node server/scripts/setup-s3.mjs"
   },
   "dependencies": {

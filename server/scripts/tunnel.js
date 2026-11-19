@@ -77,6 +77,12 @@ async function startTunnel(requestedSubdomain, attempt = 1) {
   try {
     const fs = await import('fs');
     if (fs.existsSync(cloudflaredPath)) {
+      // Clean up any lingering cloudflared processes before starting
+      try {
+        const { execSync } = await import('child_process');
+        execSync('pkill -9 -f "cloudflared tunnel" || true', { stdio: 'ignore' });
+      } catch (_) {}
+
       console.log(`[Tunnel] Starting high-speed Cloudflare Tunnel to port ${PORT}...`);
       const child = spawn(cloudflaredPath, ['tunnel', '--url', `http://127.0.0.1:${PORT}`]);
       let resolvedUrl = null;
@@ -89,7 +95,7 @@ async function startTunnel(requestedSubdomain, attempt = 1) {
             resolvedUrl = match[0];
             resolve({
               url: resolvedUrl,
-              close: () => child.kill(),
+              close: () => { try { child.kill('SIGKILL'); } catch (_) {} },
               on: (event, cb) => {
                 if (event === 'close') child.on('close', cb);
                 if (event === 'error') child.on('error', cb);
@@ -104,7 +110,7 @@ async function startTunnel(requestedSubdomain, attempt = 1) {
             resolvedUrl = match[0];
             resolve({
               url: resolvedUrl,
-              close: () => child.kill(),
+              close: () => { try { child.kill('SIGKILL'); } catch (_) {} },
               on: (event, cb) => {
                 if (event === 'close') child.on('close', cb);
                 if (event === 'error') child.on('error', cb);
@@ -133,6 +139,12 @@ async function startTunnel(requestedSubdomain, attempt = 1) {
       port: PORT,
       subdomain: requestedSubdomain,
     });
+
+    if (tunnel && typeof tunnel.on === 'function') {
+      tunnel.on('error', (err) => {
+        console.warn('[Tunnel Error Caught]:', err.message);
+      });
+    }
 
     const expectedHost = `${requestedSubdomain}.loca.lt`;
     if (!tunnel.url.includes(expectedHost) && attempt < 5) {
@@ -358,6 +370,14 @@ async function main() {
   process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);
 }
+
+process.on('uncaughtException', (err) => {
+  if (err?.message && (err.message.includes('localtunnel') || err.message.includes('ECONNREFUSED') || err.message.includes('connection refused'))) {
+    console.warn('[Tunnel Network Error Handled]:', err.message);
+    return;
+  }
+  console.error('[HALO Tunnel Uncaught Error]:', err);
+});
 
 main().catch((err) => {
   console.error('[HALO Tunnel Fatal Error]:', err);
